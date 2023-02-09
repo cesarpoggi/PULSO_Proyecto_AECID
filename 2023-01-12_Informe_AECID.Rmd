@@ -1,0 +1,4032 @@
+---
+title: "AECID TABLAS"
+date: "`r format(Sys.Date(), '%d de Diciembre de %Y')`"
+output: 
+  officedown::rdocx_document:
+    reference_docx: !expr system.file('informe_pulso_plantilla.docx', package = 'pulso')
+    tables:
+      style: Table
+      layout: autofit
+      width: 1.0
+      align: center
+      topcaption: true
+      caption: 
+        style: Table Caption
+        pre: "Tabla "
+        sep: ": "
+        tnd: 0
+        tns: '-'
+        fp_text: !expr officer::fp_text_lite(bold = TRUE)
+    plots:
+      style: Normal
+      align: center
+      topcaption: true
+      caption: 
+        style: Image Caption
+        pre: "Gráfico "
+        sep: ": "
+        tnd: 0
+        tns: '-'
+        fp_text: !expr officer::fp_text_lite(bold = TRUE)
+    page_size:
+      width: 8.3
+      height: 11.7
+      orient: "portrait"
+    page_margins:
+      bottom: 0.984252
+      top: 0.984252
+      right: 1.1811
+      left: 1.1811
+      header: 0.5
+      footer: 0.5
+      gutter: 0
+    reference_num: true
+knit: (
+  function(inputFile, encoding) {
+    rmarkdown::render(
+      input = inputFile,
+      encoding = encoding,
+      output_file = glue::glue("Tablas y significancias_AECID", format(Sys.Date(), '%d.%m.%y'),".docx" )
+      )
+    }
+  )
+--- 
+```{r setup, include=FALSE}
+
+#configuraciones
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(devEMF, knitr)
+knitr::opts_chunk$set(echo = FALSE, 
+                      warning = FALSE, 
+                      message = FALSE,
+                      fig.cap.style = "Image Caption",
+                      tab.cap.style = "Table Caption",
+                      dev = "emf",
+                      fig.ext = "emf")
+options(yaml.eval.expr = TRUE)
+
+#paquetes
+pacman::p_load(#data tools
+                tidyverse, janitor, glue, lubridate, scales, Hmisc,lazyeval, readxl,
+                #Gráficos
+                plotly, ggrepel, cowplot, grid, fmsb, 
+                #importar / exportar
+                haven, rio, officer, officedown,
+                #Etiquetas
+                sjlabelled,
+                #tablas
+                flextable, knitr, kableExtra, DT, gtsummary, gt,
+                #Temas
+                ggpubr,
+                #Colores
+                paletteer, RColorBrewer)
+
+#detach("package:pulso", unload = TRUE)
+# pacman::p_load_current_gh("pulsopucp/pulso")
+# pacman::p_load_gh(
+# # paquete pulso
+# "pulsopucp/pulso")
+
+library(pulso)
+library(chisq.posthoc.test)
+
+#Se carga la BD sin etiquetas
+ASE <- read_excel("data/ASE.xls", sheet = "Base", skip = 2)
+ 
+ASE_1<-
+  ASE %>% 
+  mutate(
+    #Se selecciona las variables de cruce 
+    #1.SEXO
+    sexo = case_when(
+      P10_1 == 1 ~ "Hombre", 
+      TRUE ~ "Mujer"),
+    
+    #2.EDAD
+    edad = case_when(
+      P11_1 < 30 ~ "18-29", 
+      P11_1 >= 30 & P11_1 < 45 ~ "30-44", 
+      TRUE ~ "45-70"),
+    
+    #3.Lima y Regiones
+    # #2 casos vacíos
+    #norte:CAJAMARCA,LAMBAYEQUE,PIURA,LA LIBERTAD, NORTE =5
+    #centro: ANCASH, JUNIN, HUANUCO, HUANCAVELICA, AYACUCHO, ICA =6 
+    #sur: AREQUIPA, TACNA, CUSCO, SUR, PUNO = 4
+    #oriente: LORETO, UCAYALI, SAN MARTIN =3
+    #Lima metropolitana: LIMA, CALLAO = 2
+    region = P215_1,
+    aregion = factor(case_when(
+      region == "CAJAMARCA" | region == "LAMBAYEQUE" | region == "PIURA" | region == "LA LIBERTAD" | region == "NORTE" ~ "Norte", 
+                                
+      region == "AREQUIPA" | region == "TACNA" | region == "CUSCO" | region == "SUR" | region == "PUNO" ~ "Sur", 
+                                
+      region == "ANCASH" | region == "JUNIN" | region == "HUANUCO" | region == "HUANCAVELICA" | region == "AYACUCHO" | region == "ICA" ~ "Centro", 
+                                       
+      region == "LORETO" | region == "UCAYALI" | region == "SAN MARTIN" ~ "Oriente", 
+                                              
+      region == "LIMA" | region == "CALLAO" ~ "Lima/ Callao", 
+      
+      TRUE ~ "NS/NR"), 
+                         
+      levels = c ("Norte", "Sur", "Centro", "Oriente", "Lima/ Callao")),
+    
+    #4.Grado educativo
+    #4.1. 189 -> encuestado
+    educa1 = factor(case_when(
+      P189_1 == 1 | P189_1 == 2 | P189_1 == 3 | P189_1 == 4 ~ "Primaria o menor",
+      P189_1 == 5 | P189_1 == 6 ~ "Secundaria",
+      P189_1 == 7 | P189_1 == 8 | P189_1 == 9 | P189_1 == 10 ~ "Superior técnica/ Universitaria",
+      P189_1 == 11 ~ "Posgrado", 
+      TRUE ~ "NS/NR"), 
+    levels = c("Primaria o menor", "Secundaria", "Superior técnica/ Universitaria", "Posgrado", "NS/NR")),
+    
+    
+    #4.2. 192 -> educa2 persona que oporta + ingresos 
+    #educa2a -> etiquetas agrupadas
+    
+    educa2 = as.numeric(P192_1),
+    educa2a = case_when(
+      educa2 == 1 ~ "Sin nivel",
+      educa2 == 2 ~ "Inicial",
+      educa2 == 3 | educa2 == 4 ~ "Primaria",
+      educa2 == 5 | educa2 == 6 ~ "Secundaria",
+      educa2 == 7 | educa2 == 8 ~ "Superior técnica",
+      educa2 == 9 | educa2 == 10 ~ "Superior universitaria",
+      educa2 == 11 ~ "Posgrado", 
+      TRUE ~ "NS/NR"
+    ),
+    
+    n1 = case_when(
+      educa2 == 1 ~ 0,
+      educa2 >1 & educa2 <= 5 ~ 2,
+      educa2 == 6 ~ 3,
+      educa2 == 7 ~ 4, 
+      educa2 == 8 ~ 5,
+      educa2 == 9 ~ 7,
+      educa2 == 10 ~ 9,
+      educa2 == 11 ~ 10,
+      TRUE ~ 0
+    ),
+    
+
+    #5.Mención de acoso político
+      #99
+    map = as.numeric(ASE$P99_1),
+    mape = factor(case_when(
+      map == 1 ~ "Un político hombre",
+      map == 2 ~ "Un político mujer",
+      map == 3 ~ "Ambos por igual",
+      map == 4 ~ "A ninguno",
+      TRUE ~ "NS/NR"
+    ),
+    levels = c("Un político hombre", "Un político mujer", "Ambos por igual", "A ninguno", "NS/NR")),
+
+    #NSE
+    #N1: educa2p persona que oporta + ingresos #educa2p
+    #N2: Para obtener el puntaje de N2 se deben sumar los puntajes asignados a 
+    #los artefactos o servicios con los que cuenta el hogar la persona encuestada. #n2
+    #P194_1	P195_1	P196_1	P197_1	P198_1	P199_1
+    
+    art1 = case_when(as.numeric(P194_1) == 1~ 3.5,TRUE~0),
+    art2 = case_when(as.numeric(P195_1) == 1~ 3.5,TRUE~0),
+    art3 = case_when(as.numeric(P196_1) == 1~ 3.5,TRUE~0),
+    art4 = case_when(as.numeric(P197_1) == 1~ 3.5,TRUE~0),
+    art5 = case_when(as.numeric(P198_1) == 1~ 3.5,TRUE~0),
+    art6 = case_when(as.numeric(P199_1) == 1~ 3.5,TRUE~0),
+
+    n2 = rowSums(across(c(art1, art2, art3, art4, art5, art6))),
+
+
+    #N3: material predominante de los pisos #n3
+    mpp = as.numeric(P188_1),
+    
+    #aca antes habia un error, mezclaban con educa2
+    n3 = case_when(mpp == 1 ~ 9, 
+                   mpp == 2 ~ 7, 
+                   mpp == 3 ~ 6, 
+                   mpp == 4 ~ 3, 
+                   mpp == 5 ~ 0, 
+                   TRUE ~ 0),
+  
+    #N4: n°habitaciones / n°personas que viven en el hogar
+    #n4 -> 35/#36
+    
+    # hxm = P35_1/P36_1, #por que dividía estas variables?
+    hxm = P184_1/P185_1, 
+    
+    n4 = case_when(
+      hxm >= 1 ~ 5, 
+      hxm < 1 & hxm >= 0.75 ~ 4, 
+      hxm < 0.75 & hxm >=0.5 ~ 3,
+      hxm < 0.5 & hxm >=0.25 ~ 2,
+      hxm < 0.25 & hxm > 0 ~ 1,
+      TRUE ~ 0),
+    
+    #N5: seguros de salud del jh
+    #n5   
+    ss = as.numeric(P193_1),
+    n5 = case_when(
+      ss == 1 ~ 1, 
+      ss == 2 ~ 2, 
+      ss == 3 ~ 2, 
+      ss == 4 ~ 3, 
+      ss == 5 ~ 3, 
+      ss == 6 ~ 4, 
+      ss == 7 ~ 5, 
+      TRUE ~ 0),
+    
+    ###NSE##
+    nsep = rowSums(across(c(n1, n2, n3, n4, n5))),
+    
+    nse = case_when(
+      nsep < 10 ~ "NSE E", 
+      nsep >= 10 & nsep < 22 ~ "NSE D", 
+      nsep >= 22 & nsep < 26 ~ "NSE C2", 
+      nsep >= 26 & nsep < 36 ~ "NSE C1", 
+      nsep >= 36 & nsep < 41 ~ "NSE B2", 
+      nsep >= 41 & nsep < 46 ~ "NSE B1", 
+      nsep >= 46 & nsep < 49 ~ "NSE A2", 
+      nsep >= 49 & nsep <= 50 ~ "NSE A1", 
+      TRUE ~ "NS/NR"),
+    
+    nse2 = case_when(
+      nsep < 22 ~ "D/E", 
+      nsep >= 22 & nsep < 36 ~ "C", 
+      nsep >= 36 & nsep <= 50 ~ "A/B", 
+      TRUE ~ "NS/NR"),
+  ) %>% 
+  
+  #RENOMBRANDO VARIABLES
+  sjlabelled::var_labels(
+    sexo = "Sexo",
+    edad = "Edad",
+    aregion = "Lima y regiones",
+    educa1 = "Grado educativo",
+    mape = "Mención de acoso político",
+    nse2 = "Nivel socio-económico"
+  ) %>% 
+  
+  mutate(
+    #ETIQUETAMIENTO Y ORDENAMIENTO DE NIVELES DE VARIABLES
+    across(c(P12_1),
+      ~ factor(case_when(
+        . == 1 ~ "Muy interesado/a", 
+        . == 2 ~ "Interesado/a", 
+        . == 3 ~ "Poco interesado/a", 
+        . == 4 ~ "Nada interesado/a", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Muy interesado/a", "Interesado/a", "Poco interesado/a", "Nada interesado/a","NS/NR"))),
+    
+    across(c(P13_1),
+      ~ factor(case_when(
+        . == 1 ~ "Muy informado/a", 
+        . == 2 ~ "Informado/a", 
+        . == 3 ~ "Poco informado/a", 
+        . == 4 ~ "Nada informado/a", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Muy informado/a", "Informado/a", "Poco informado/a", "Nada informado/a", "NS/NR"))),
+    
+    across(c(P14_1, P15_1, P16_1, P17_1, P18_1, P19_1, P20_1, P21_1, P22_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Muy de acuerdo", 
+        . == 2 ~ "De acuerdo", 
+        . == 3 ~ "En desacuerdo", 
+        . == 4 ~ "Muy en desacuerdo", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo","NS/NR"))),
+    
+    #p23_1 en sintaxis original tenia problemas
+    across(c(P23_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Se puede confiar en la mayoría de las personas", 
+        . == 2 ~ "Es muy difícil confiar en los demás", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Se puede confiar en la mayoría de las personas", "Es muy difícil confiar en los demás", "NS/NR"))),
+     
+    #24 a 34
+    across(c(P24_1, P25_1, P26_1, P27_1, P28_1, P29_1, P30_1, P31_1, P32_1, P33_1, P34_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Mucha", 
+        . == 2 ~ "Alguna", 
+        . == 3 ~ "Poca", 
+        . == 4 ~ "Ninguna", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Mucha", "Alguna", "Poca", "Ninguna","NS/NR"))),
+    
+    #35-46
+    across(c(P35_1, P36_1, P37_1, P38_1, P39_1, P40_1, P41_1, P42_1, P43_1, P44_1, P45_1, P46_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Sí pertenece", 
+        . == 2 ~ "No pertenece", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Sí pertenece", "No pertenece", "NS/NR"))),
+    
+    #47-56
+    across(c(P47_1, P48_1, P49_1, P50_1, P51_1, P52_1, P53_1, P54_1, P55_1, P56_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Ha hecho", 
+        . == 2 ~ "Podría hacer", 
+        . == 3 ~ "Nunca lo haría", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Ha hecho", "Podría hacer", "Nunca lo haría","NS/NR"))),
+    
+    across(c(P57_1), 
+      ~ factor(case_when(
+        . == 1 ~ "La democracia es preferible a cualquier otra forma de gobierno", 
+        . == 2 ~ "A veces un gobierno autoritario o una dictadura puede ser preferible a un gobierno democrático", 
+        . == 3 ~ "Me da lo mismo un tipo de gobierno u otro", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("La democracia es preferible a cualquier otra forma de gobierno", 
+                   "A veces un gobierno autoritario o una dictadura puede ser preferible a un gobierno democrático", 
+                   "Me da lo mismo un tipo de gobierno u otro",
+                   "NS/NR"))),
+    
+    across(c(P58_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Muy satisfecho", 
+        . == 2 ~ "Satisfecho", 
+        . == 3 ~ "Insatisfecho", 
+        . == 4 ~ "Muy insatisfecho", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Muy satisfecho", "Satisfecho", "Insatisfecho", "Muy insatisfecho", "NS/NR"))),
+    
+    across(c(P59_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Las listas de candidatos deben presentar intercaladamente candidatos hombres y candidatas mujeres", 
+        . == 2 ~ "Las listas de candidatos deben presentar 30% de candidatas mujeres", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Las listas de candidatos deben presentar intercaladamente candidatos hombres y candidatas mujeres", 
+                   "Las listas de candidatos deben presentar 30% de candidatas mujeres",
+                   "NS/NR"))),
+    
+    #60-99
+    across(c(P60_1, P61_1, P62_1, P63_1, P64_1, P65_1, P66_1, P67_1, P68_1, P69_1, 
+             P70_1, P71_1, P72_1, P73_1, P74_1, P75_1, P76_1, P77_1, P78_1, P79_1, 
+             P80_1, P81_1, P82_1, P83_1, P84_1, P85_1, P86_1, P87_1, P88_1, P89_1, 
+             P90_1, P91_1, P92_1, P93_1, P94_1, P95_1, P96_1, P97_1, P98_1, P99_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Un político hombre", 
+        . == 2 ~ "Una política mujer", 
+        . == 3 ~ "Ambos por igual", 
+        . == 4 ~ "Ninguno", 
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Un político hombre", "Una política mujer", "Ambos por igual", "Ninguno","NS/NR"))),
+    
+    #100-103
+    across(c(P100_1, P101_1, P102_1, P103_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Un hombre", 
+        . == 2 ~ "Una mujer", 
+        . == 3 ~ "Ambos por igual", 
+        . == 4 ~ "Ninguno", 
+        . == 8 | . == 9 | . == 99 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Un hombre", "Una mujer", "Ambos por igual", "Ninguno","NS/NR"))),
+    
+    #104-106 // 143-145 // 160-169 // 172-181 // 187 // 194-199
+    across(c(P104_1, P105_1, P106_1,
+             
+             P143_1, P144_1, P145_1,
+             
+             P160_1, P161_1, P162_1, P163_1, P164_1, P165_1, P166_1, P167_1, P168_1, P169_1,
+             
+             P172_1, P173_1, P174_1, P175_1, P176_1, P177_1, P178_1, P179_1, P180_1, P181_1,
+             
+             P187_1, P194_1, P195_1, P196_1, P197_1, P198_1, P199_1
+             ), 
+      ~ factor(case_when(
+        . == 1 ~ "Sí", 
+        . == 2 ~ "No", 
+        . == 8 | . == 9 | . == 99 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Sí", "No", "NS/NR"))),
+    
+    #107 -> respuesta multiple
+    P107.1 = case_when(P107_1 == 1| P107_2 == 1 ~ "No concordaban con mi posición e ideas políticas",
+                          TRUE ~ NA_character_),
+    P107.2 = case_when(P107_1 == 2| P107_2 == 2 ~ "No tenían buenas propuestas frente a los problemas que me interesan",
+                          TRUE ~ NA_character_),
+    P107.3 = case_when(P107_1 == 3| P107_2 == 3 ~ "Por el partido político al que pertenecían",
+                          TRUE ~ NA_character_),
+    P107.4 = case_when(P107_1 == 4| P107_2 == 4 ~ "No estaban preparadas para ejercer esos cargos",
+                          TRUE ~ NA_character_),
+    P107.5 = case_when(P107_1 == 5| P107_2 == 5 ~ "No me generaban confianza",
+                          TRUE ~ NA_character_),
+    P107.6 = case_when(P107_1 == 6| P107_2 == 6 ~ "No tenían posibilidades de gaTRUE ~ NA_characterr",
+                          TRUE ~ NA_character_),
+    P107.7 = case_when(P107_1 == 7| P107_2 == 7 ~ "No había candidatas mujeres",
+                          TRUE ~ NA_character_),
+    P107.8 = case_when(P107_1 == 8| P107_2 == 8 ~ "Otra razón",
+                          TRUE ~ NA_character_),
+    P107.9 = case_when(P107_1 > 87| P107_2 > 87 ~ "NS/NR",
+                          TRUE ~ NA_character_),
+    
+    
+    #108 -> Otra razón: pregunta abierta
+    
+    #109
+    across(c(P109_1), 
+    ~ factor(case_when(
+      . == 1 ~ "Por la falta de interés de las mujeres en la política", 
+      . == 2 ~ "Por la falta de respaldo de los partidos y agrupaciones políticas", 
+      . == 3 ~ "Por la falta de preparación de las mujeres para esos cargos", 
+      . == 4 ~ "Porque el electorado prefiere votar por hombres que por mujeres", 
+      . == 5 ~ "Otra razón", 
+      . == 8 | . == 9 | . == 99 ~ "NS/NR", 
+      TRUE ~ NA_character_ ),
+      
+      levels = c("Por la falta de interés de las mujeres en la política", 
+                 "Por la falta de respaldo de los partidos y agrupaciones políticas", 
+                 "Por la falta de preparación de las mujeres para esos cargos", 
+                 "Porque el electorado prefiere votar por hombres que por mujeres", 
+                 "Otra razón", 
+                 "NS/NR"))),
+    
+    #110 -> Otra razón: pregunta abierta
+        
+    #111-121 // 130-142 // P146_1 // 149-155
+    across(c(P111_1, P112_1, P113_1, P114_1, P115_1, P116_1, P117_1, P118_1, P119_1, P120_1, P121_1,
+             
+             P130_1, P131_1, P132_1, P133_1, P134_1, P135_1, P136_1, P137_1, P138_1, P139_1, P140_1,
+             P141_1, P142_1,
+             
+             P146_1,
+             
+             P149_1, P150_1, P151_1, P152_1, P153_1, P154_1, P155_1
+             ), 
+      ~ factor(case_when(
+        . == 1 ~ "Muy de acuerdo", 
+        . == 2 ~ "De acuerdo", 
+        . == 3 ~ "En desacuerdo", 
+        . == 4 ~ "Muy en desacuerdo", 
+        . == 8 | . == 9 | . == 99 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Muy de acuerdo", "De acuerdo", "En desacuerdo", "Muy en desacuerdo", "NS/NR"))),
+    
+    #122
+    across(c(P122_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Mucho más importante para el hombre", 
+        . == 2 ~ "Algo más importante para el hombre", 
+        . == 3 ~ "Algo más importante para la mujer", 
+        . == 4 ~ "Mucho más importante para la mujer",
+        . == 5 ~ "Para ambos igual",
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Mucho más importante para el hombre", 
+                   "Algo más importante para el hombre", 
+                   "Algo más importante para la mujer", 
+                   "Mucho más importante para la mujer", 
+                   "Para ambos igual", 
+                   "NS/NR"))),
+        
+    #123-129
+    across(c(P123_1, P124_1, P125_1, P126_1, P127_1, P128_1, P129_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Las mujeres son mucho más apropiadas", 
+        . == 2 ~ "Las mujeres son algo más apropiadas", 
+        . == 3 ~ "Por igual las mujeres y los hombres", 
+        . == 4 ~ "Los hombres son algo más apropiados",
+        . == 5 ~ "Los hombres son mucho más apropiados",
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Las mujeres son mucho más apropiadas", "Las mujeres son algo más apropiadas", "Por igual las mujeres y los hombres", "Los hombres son algo más apropiados", "Los hombres son mucho más apropiados", "NS/NR"))),
+    
+    #147-148
+    across(c(P147_1, P148_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Mucho", 
+        . == 2 ~ "Algo", 
+        . == 3 ~ "Poco", 
+        . == 4 ~ "Nada",
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Mucho", "Algo", "Poco", "Nada", "NS/NR"))),
+    
+    #156-159
+    across(c(P156_1, P157_1, P158_1, P159_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Mucho", 
+        . == 2 ~ "Algo", 
+        . == 3 ~ "Poco", 
+        . == 4 ~ "Nada",
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Mucho", "Algo", "Poco", "Nada", "NS/NR"))),
+    
+    #170 -> otros: pregunta abierta
+    
+    #171
+    across(c(P171_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Diario", 
+        . == 2 ~ "Varias veces por semana", 
+        . == 3 ~ "Semanal", 
+        . == 4 ~ "Varias veces al mes",
+        . == 5 ~ "Mensual",
+        . == 6 ~ "Pocas veces al año",
+        . == 8 | . == 9 ~ "NS/NR", 
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Diario", "Varias veces por semana", "Semanal", "Varias veces al mes", "Mensual", "Pocas veces al año", "NS/NR"))),
+    
+    #182 -> Otros: pregunta abierta
+    
+    #183 -> respuesta multiple
+    
+    P183.1 = case_when(P107_1 == 1 |
+                         P107_2 == 1 ~ "Persona y/o familiar",
+                       TRUE ~ NA_character_),
+    P183.2 = case_when(P107_1 == 2 |
+                         P107_2 == 2 ~ "Laboral/ trabajo", 
+                       TRUE ~ NA_character_),
+    P183.3 = case_when(P107_1 == 3 |
+                         P107_2 == 3 ~ "Estudios", 
+                       TRUE ~ NA_character_),
+    P183.4 = case_when(P107_1 == 4 |
+                         P107_2 == 4 ~ "Actividad política/ opiniones políticas",
+                       TRUE ~ NA_character_),
+    P183.5 = case_when(P107_1 == 5 |
+                         P107_2 == 5 ~ "Actividad pública", 
+                       TRUE ~ NA_character_),
+    P183.6 = case_when(P107_1 == 6 |
+                         P107_2 == 6 ~ "Activismo social", 
+                       TRUE ~ NA_character_),
+    P183.7 = case_when(P107_1 == 7 |
+                         P107_2 == 7 ~ "Otros", 
+                       TRUE ~ NA_character_),
+    P183.8 = case_when(P107_1 >= 8 |
+                         P107_2 >= 8 ~ "NS/NR", 
+                       TRUE ~ NA_character_), 
+    
+    #184-186: preguntas numéricas
+    
+    #184, 186
+    across(c(P184_1, P186_1), 
+      ~ factor(case_when(
+        . < 4 ~ "0 a 3", 
+        . < 8 ~ "4 a 7", 
+        . < 12 ~ "8 a 11", 
+        TRUE ~ NA_character_), 
+        
+        levels = c("0 a 3", "4 a 7", "8 a 11"))),
+    
+    #185
+    across(c(P185_1), 
+      ~ factor(case_when(
+        . < 6 ~ "0 a 5", 
+        . < 11 ~ "6 a 10", 
+        . < 16 ~ "11 a 15", 
+        TRUE ~ NA_character_), 
+        
+        levels = c("0 a 5", "6 a 10", "11 a 15"))),
+    
+    #188
+    across(c(P188_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Parquet o madera pulida y similares; porcelanato, alfombra, mármol", 
+        . == 2 ~ "Laminado tipo madera, láminas asfálticas o similares", 
+        . == 3 ~ "Losetas / terrazos, mayólicas, cerámicos, vinílicos, mosaico o similares",
+        . == 4 ~ "Cemento sin pulir o pulido / madera (entablados)/ tapizón",
+        . == 4 ~ "Tierra / otro material (arena y tablones sin pulir)",
+        . == 8 | . == 9 ~ "NS/NR",
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Parquet o madera pulida y similares; porcelanato, alfombra, mármol", 
+                   "Laminado tipo madera, láminas asfálticas o similares", 
+                   "Losetas / terrazos, mayólicas, cerámicos, vinílicos, mosaico o similares", 
+                   "Cemento sin pulir o pulido / madera (entablados)/ tapizón", 
+                   "Tierra / otro material (arena y tablones sin pulir)", 
+                   "NS/NR"))),
+    
+    #189 -> variable control (?)
+    
+    #190,192
+    across(c(P190_1, P193_1), 
+      ~ factor(case_when(
+        . == 1 ~ "Seguro integral de salud (SIS)", 
+        . == 2 ~ "Seguro universitario", 
+        . == 3 ~ "Seguro escolar privado",
+        . == 4 ~ "Essalud",
+        . == 5 ~ "Seguro FF.AA./ Policiales",
+        . == 6 ~ "Entidad prestadora de salud - EPS",
+        . == 7 ~ "Seguro privado de salud",
+        . == 8 | . == 88 |. == 99 ~ "NS/NR",
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Seguro integral de salud (SIS)", 
+                   "Seguro universitario", 
+                   "Seguro escolar privado", 
+                   "Essalud", 
+                   "Seguro FF.AA./ Policiales", 
+                   "Entidad prestadora de salud - EPS", 
+                   "Seguro privado de salud", 
+                   "NS/NR"))),
+    
+    #191: variable irrelevante
+    
+    #192
+    across(c(P192_1), 
+      ~ factor(case_when(
+        . == 1 | . == 2 ~ "Sin nivel/Inicial",
+        . == 3 | . == 4 ~ "Primaria",
+        . == 5 | . == 6 ~ "Secundaria",
+        . == 7 | . == 8 ~ "Superior técnica",
+        . == 9 | . == 10 ~ "Superior universitaria",
+        . == 11 ~ "Posgrado",
+        . == 88 | . == 99 ~ "NS/NR",
+        TRUE ~ "NS/NR"), 
+        
+        levels = c("Sin nivel/Inicial", 
+                   "Primaria", 
+                   "Secundaria", 
+                   "Superior técnica", 
+                   "Superior universitaria", 
+                   "Posgrado", 
+                   "NS/NR"))),
+        )
+
+```
+
+```{r sintax tabla}
+
+tabla_pulso <-function (data, main_var = NULL, sub_var = NULL, filtrar = TRUE, 
+          titulo = titulo1){
+  switch_sub_var <- tidyselect::eval_select(enquo(sub_var), 
+                                            data[unique(names(data))])
+  switch_sub_var <- names(switch_sub_var)
+  switch_sub_var <- switch_sub_var %>% table() %>% sum() %>% 
+    as.numeric()
+  switch_main_var <- tidyselect::eval_select(enquo(main_var), 
+                                             data[unique(names(data))])
+  switch_main_var <- names(switch_main_var)
+  switch_main_var <- switch_main_var %>% table() %>% sum() %>% 
+    as.numeric()
+  titulo1 <- data %>% select({
+    {
+      main_var
+    }
+  }) %>% get_label() %>% unique()
+  pop <- data %>% select({
+    {
+      main_var
+    }
+  }) %>% names()
+  labels <- tibble(numero = if (is.numeric(unlist(sjlabelled::get_values(data[, 
+                                                                              pop]), use.names = FALSE))) {
+    as.character(unlist(sjlabelled::get_values(data[, pop]), 
+                        use.names = FALSE))
+  }
+  else {
+    NA
+  }, nombres = unlist(sjlabelled::get_labels(data[pop]), use.names = FALSE), 
+  )
+  if (switch_main_var == 1 & switch_sub_var == 0) {
+    t0 <- data %>% filter({
+      {
+        filtrar
+      }
+    }) %>% select({
+      {
+        main_var
+      }
+    }) %>% drop_na() %>% mutate(across(everything(), ~replace(., 
+                                                              . == 0, NA))) %>% haven::as_factor() %>% mutate(across(everything(), 
+                                                                                                                     ~forcats::fct_drop(., labels[labels$numero == 0, 
+                                                                                                                     ]$nombres))) %>% gtsummary::tbl_summary(statistic = all_categorical() ~ 
+                                                                                                                                                               "{p}% ({n})", digits = list(everything() ~ c(2, 
+                                                                                                                                                                                                            0)), missing_text = "No sabe / No responde", label = everything() ~ 
+                                                                                                                                                               "") %>% modify_header(label ~ " ") %>% bold_labels() %>% 
+      remove_row_type(variables = everything(), type = c("header")) %>% 
+      modify_footnote(update = everything() ~ NA) %>% 
+      as_flex_table() %>% add_header_lines(titulo) %>% 
+      add_footer_lines("% (n) \nFuente: Pulso PUCP") %>% 
+      italic(italic = TRUE, part = "header") %>% set_table_properties(layout = "autofit") %>% 
+      fontsize(size = 9, part = "all") %>% height(height = 0.75, 
+                                                  part = "body")
+    t0
+  }
+  else if (switch_main_var == 1 & switch_sub_var > 0) {
+    fn_subtable <- function(data, main, sub) {
+      data %>% filter({
+        {
+          filtrar
+        }
+      }) %>% dplyr::select({
+        {
+          main
+        }
+      }, {
+        {
+          sub
+        }
+      }) %>% drop_na() %>% mutate(across(everything(), 
+                                         ~replace(., . == 0, NA))) %>% haven::as_factor() %>% 
+        mutate(across(everything(), ~forcats::fct_drop(., 
+                                                       labels[labels$numero == 0, ]$nombres))) %>% 
+        gtsummary::tbl_summary(by = {
+          {
+            sub
+          }
+        }, statistic = gtsummary::all_categorical() ~ 
+          "{p}% ({n})", digits = list(dplyr::everything() ~ 
+                                        c(2, 0)), missing_text = "No sabe / No responde", 
+        label = everything() ~ " ") %>% remove_row_type(variables = everything(), 
+                                                       type = c("header")) %>% modify_footnote(update = everything() ~ 
+                                                                                                 NA)
+    }
+    main_var <- rlang::enexpr(main_var)
+    sub_var <- tidyselect::eval_select(enquo(sub_var), data[unique(names(data))])
+    sub_var <- names(sub_var)
+    sub_var1 <- rlang::syms(sub_var)
+    t0 <- data %>% filter({
+      {
+        filtrar
+      }
+    }) %>% dplyr::select({
+      {
+        main_var
+      }
+    }) %>% drop_na() %>% mutate(across(everything(), ~replace(., 
+                                                              . == 0, NA))) %>% haven::as_factor() %>% mutate(across(everything(), 
+                                                                                                                     ~forcats::fct_drop(., labels[labels$numero == 0, 
+                                                                                                                     ]$nombres))) %>% gtsummary::tbl_summary(statistic = gtsummary::all_categorical() ~ 
+                                                                                                                                                               "{p}% ({n})", digits = list(dplyr::everything() ~ 
+                                                                                                                                                                                             c(2, 0)), missing_text = "No sabe / No responde", 
+                                                                                                                                                             label = everything() ~ " ") %>% gtsummary::modify_header(label ~ 
+                                                                                                                                                                                                                       " ") %>% gtsummary::bold_labels() %>% remove_row_type(variables = everything(), 
+                                                                                                                                                                                                                                                                            type = c("header")) %>% modify_footnote(update = everything() ~ 
+                                                                                                                                                                                                                                                                                                                      NA)
+    sub_tables <- purrr::map(sub_var1, ~fn_subtable(data = data, 
+                                                    main = main_var, sub = .x))
+    sub_var_labels <- data %>% select(sub_var) %>% get_label()
+    tbls <- c(list(t0), sub_tables) %>% gtsummary::tbl_merge(tab_spanner = c("**Total**", 
+                                                                             paste0("**", sub_var_labels, "**"))) %>% bold_labels() %>% 
+      as_flex_table() %>% add_header_lines(titulo) %>% 
+      add_footer_lines("% (n) \nFuente: Pulso PUCP") %>% 
+      italic(italic = TRUE, part = "header") %>% set_table_properties(layout = "autofit") %>% 
+      fontsize(size = 9, part = "all") %>% height(height = 0.75, 
+                                                  part = "body")
+    tbls
+  }
+  else if (switch_main_var > 1 & switch_sub_var == 0) {
+    tbl <- data %>% filter({
+      {
+        filtrar
+      }
+    }) %>% select({
+      {
+        main_var
+      }
+    }) %>% sjlabelled::as_label() %>% gtsummary::tbl_summary(statistic = all_categorical() ~ 
+                                                               "{p_nonmiss}% ({n})", digits = list(dplyr::everything() ~ 
+                                                                                                     c(2, 0)), missing = "no", label = everything() ~ 
+                                                               " ") %>% modify_footnote(update = everything() ~ 
+                                                                                         NA) %>% remove_row_type(-1) %>% modify_header(label ~ 
+                                                                                                                                         " ") %>% bold_labels() %>% remove_row_type(variables = everything(), 
+                                                                                                                                                                                   type = c("header")) %>% as_flex_table() %>% add_header_lines(titulo) %>% 
+      add_footer_lines("Fuente: Pulso PUCP") %>% italic(italic = TRUE, 
+                                                        part = "header") %>% set_table_properties(layout = "autofit") %>% 
+      fontsize(size = 9, part = "all") %>% height(height = 0.75, 
+                                                  part = "body")
+    tbl
+  }
+  else if (switch_main_var > 1 & switch_sub_var > 0) {
+    fn_subtable <- function(data, main, sub) {
+      data %>% filter({
+        {
+          filtrar
+        }
+      }) %>% dplyr::select({
+        {
+          main
+        }
+      }, {
+        {
+          sub
+        }
+      }) %>% sjlabelled::as_label() %>% gtsummary::tbl_summary(by = {
+        {
+          sub
+        }
+      }, statistic = all_categorical() ~ "{p_nonmiss}% ({n})", 
+      digits = list(dplyr::everything() ~ c(2, 0)), 
+      missing = "no", label = everything() ~ " ") %>% 
+        modify_footnote(update = everything() ~ NA) %>% 
+        remove_row_type(-1) %>% modify_header(label ~ 
+                                                " ") %>% bold_labels() %>% remove_row_type(variables = everything(), 
+                                                                                          type = c("header"))
+    }
+    sub_var <- tidyselect::eval_select(enquo(sub_var), data[unique(names(data))])
+    sub_var <- names(sub_var)
+    sub_var1 <- rlang::syms(sub_var)
+    t0 <- data %>% filter({
+      {
+        filtrar
+      }
+    }) %>% select({
+      {
+        main_var
+      }
+    }) %>% sjlabelled::as_label() %>% gtsummary::tbl_summary(statistic = all_categorical() ~ 
+                                                               "{p_nonmiss}% ({n})", digits = list(dplyr::everything() ~ 
+                                                                                                     c(2, 0)), missing = "no", label = everything() ~ 
+                                                               " ") %>% modify_footnote(update = everything() ~ 
+                                                                                         NA) %>% remove_row_type(-1) %>% modify_header(label ~ 
+                                                                                                                                         " ") %>% bold_labels() %>% remove_row_type(variables = everything(), 
+                                                                                                                                                                                   type = c("header"))
+    sub_tables <- purrr::map(sub_var1, ~fn_subtable(data = data, 
+                                                    main = main_var, sub = .x))
+    sub_var_labels <- data %>% select(sub_var) %>% get_label()
+    tbls <- c(list(t0), sub_tables) %>% gtsummary::tbl_merge(tab_spanner = c("**Total**", 
+                                                                             paste0("**", sub_var_labels, "**"))) %>% bold_labels() %>% 
+      as_flex_table() %>% add_header_lines(titulo) %>% 
+      add_footer_lines("% (n) \nFuente: Pulso PUCP") %>% 
+      italic(italic = TRUE, part = "header") %>% set_table_properties(layout = "autofit") %>% 
+      fontsize(size = 9, part = "all") %>% height(height = 0.75, 
+                                                  part = "body")
+    tbls
+  }
+  else {
+    return("Error. Necesitas proporcionar al menos una variable.")
+  }
+}
+
+chisq.posthoc.test1<-function(x){
+  chisq.posthoc.test(x) %>% 
+    flextable() %>% 
+    add_footer_lines("% (n) \nFuente: Pulso PUCP") %>% 
+    italic(italic = TRUE, part = "header") %>% 
+    set_table_properties(layout = "autofit") %>% 
+    fontsize(size = 9, part = "all") %>% 
+    height(height = 0.75, part = "body")
+}
+
+```
+
+
+```{r variables cruce}
+
+ASE_1 %>% 
+  tabla_pulso(sexo)
+
+ASE_1 %>% 
+  tabla_pulso(edad)
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(aregion)
+
+ASE_1 %>% 
+  tabla_pulso(educa1)
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(mape)
+
+ASE_1 %>% 
+  tabla_pulso(nse2)
+salto()
+
+```
+
+<!---BLOCK_LANDSCAPE_START--->
+
+```{r}
+ASE_1 %>% 
+  tabla_pulso(P12_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "1.¿Cuán interesado/a está usted en la política?, ¿está…?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P12_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P12_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P12_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P12_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P12_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P12_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P13_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "2.En relación con los acontecimientos políticos en el Perú, ¿considera usted que está")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P13_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P13_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P13_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P13_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P13_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P13_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P14_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.a. El voto es la única manera que tiene la gente de influir en política")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P14_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P14_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P14_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P14_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P14_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P14_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P15_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.b. Los políticos no se preocupan mucho de lo que piensa la gente")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P15_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P15_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P15_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P15_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P15_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P15_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P16_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.c. La gente tiene muy poca influencia en las decisiones del gobierno")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P16_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P16_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P16_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P16_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P16_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P16_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P17_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.d. La mayoría de los políticos están en política solo por lo que pueden obtener de ella.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P17_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P17_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P17_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P17_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P17_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P17_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+tabla_pulso(P18_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.e. Los políticos prometen más de lo que saben que pueden cumplir")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P18_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P18_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P18_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P18_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P18_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P18_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+tabla_pulso(P19_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.f. Me considero suficientemente preparado/a como para participar en política")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P19_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P19_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P19_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P19_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P19_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P19_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+tabla_pulso(P20_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.g. Siento que podría hacer tan buen trabajo en un cargo público como la mayoría de la gente")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P20_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P20_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P20_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P20_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P20_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P20_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+tabla_pulso(P21_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.h. Me gustaría encontrar una manera de participar en cuestiones sociales y políticas pero no sé cómo hacerlo")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P21_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P21_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P21_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P21_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P21_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P21_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+tabla_pulso(P22_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "3.i. Si los partidos políticos tuvieran procesos más democráticos, sí podría pensar en participar en uno de ellos")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P22_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P22_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P22_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P22_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P22_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P22_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>%
+tabla_pulso(P23_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "4.En general, ¿diría usted que se puede confiar en la mayoría de las personas, o en la actualidad, es muy difícil confiar en los demás?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P23_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P23_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P23_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P23_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P23_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P23_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P24_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  a. El Gobierno Nacional")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P24_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P24_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P24_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P24_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P24_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P24_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P25_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  b. El Congreso de la República")
+salto() 
+
+chisq.posthoc.test1(table(ASE_1$P25_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P25_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P25_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P25_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P25_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P25_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P26_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  c. La Iglesia Católica
+")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P26_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P26_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P26_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P26_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P26_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P26_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P27_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  d. El Poder Judicial
+")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P27_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P27_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P27_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P27_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P27_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P27_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P28_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  e. Los Medios de Comunicación")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P28_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P28_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P28_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P28_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P28_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P28_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P29_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  f. Los Partidos Políticos")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P29_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P29_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P29_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P29_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P29_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P29_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P30_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  g. Las Fuerzas Armadas")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P30_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P30_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P30_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P30_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P30_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P30_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P31_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  h. Policía Nacional del Perú")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P31_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P31_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P31_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P31_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P31_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P31_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P32_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  i. Defensoría del Pueblo")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P32_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P32_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P32_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P32_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P32_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P32_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P33_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  j. Jurado Nacional de Elecciones")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P33_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P33_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P33_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P33_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P33_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P33_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P34_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "5. En general ¿usted tiene mucha, alguna, poca o ninguna confianza en las siguientes instituciones ?  k. Oficina Nacional de Procesos Electorales")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P34_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P34_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P34_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P34_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P34_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P34_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P35_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? a. Club de madres; comedores populares; comités de vaso de leche")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P35_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P35_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P35_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P35_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P35_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P35_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P36_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? b. Organizaciones religiosas (grupos religiosos o comunidades cristianas u otros)")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P36_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P36_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P36_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P36_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P36_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P36_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P37_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? c. Asociaciones o gremios profesionales")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P37_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P37_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P37_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P37_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P37_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P37_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P38_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? d. Asociaciones o gremios empresariales")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P38_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P38_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P38_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P38_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P38_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P38_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P39_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? e. Asociaciones o gremios de trabajadores - Sindicatos")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P39_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P39_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P39_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P39_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P39_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P39_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P40_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? f. Organizaciones o asociación de campesinos (rondas)")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P40_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P40_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P40_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P40_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P40_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P40_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P41_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? g. Asociaciones de Padres de Familia (APAFA)")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P41_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P41_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P41_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P41_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P41_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P41_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P42_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? h. Asociaciones educativas, artísticas, musicales o culturales")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P42_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P42_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P42_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P42_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P42_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P42_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P43_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? i. Partidos u organizaciones políticas")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P43_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P43_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P43_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P43_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P43_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P43_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P44_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? j. Organizaciones vecinales, como juntas y asociaciones de propietarios o asociaciones residenciales")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P44_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P44_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P44_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P44_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P44_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P44_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P45_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? k. Organizaciones feministas")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P45_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P45_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P45_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P45_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P45_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P45_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P46_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "6. ¿Pertenece usted a alguna de las siguientes organizaciones? l. Organizaciones juveniles")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P46_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P46_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P46_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P46_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P46_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P46_1, ASE_1$nse2))  
+salto()
+
+```
+```{r}
+ASE_1 %>% 
+  tabla_pulso(P47_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  a. Participar en marchas o manifestaciones pacíficas")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P47_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P47_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P47_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P47_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P47_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P47_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P48_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  b. Participar en huelgas")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P48_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P48_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P48_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P48_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P48_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P48_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P49_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  c. Firmar un comunicado o petición solicitando la atención de demandas sociales")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P49_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P49_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P49_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P49_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P49_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P49_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P50_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  d. Buscar a periodistas o medios de comunicación para reivindicar demandas (radio, TV, periódico, etc.)")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P50_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P50_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P50_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P50_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P50_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P50_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P51_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  e. Participar en la toma de oficinas o locales públicos")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P51_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P51_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P51_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P51_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P51_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P51_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P52_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  f. Bloquear pistas o carreteras")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P52_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P52_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P52_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P52_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P52_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P52_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P53_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  g. Asistir a reuniones vecinales o comunales")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P53_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P53_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P53_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P53_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P53_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P53_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P54_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  h. Asistir a algún mitin político o actividades de campaña")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P54_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P54_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P54_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P54_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P54_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P54_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P55_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  i. Asistir a alguna reunión pública convocada por la municipalidad o alguna autoridad distrital")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P55_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P55_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P55_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P55_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P55_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P55_1, ASE_1$nse2))  
+salto()
+
+
+ASE_1 %>% 
+  tabla_pulso(P56_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "7. ¿Me gustaría que me dijera si, en los últimos 5 años ha hecho usted alguna de estas cosas,  j. Participar en redes sociales en internet")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P56_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P56_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P56_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P56_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P56_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P56_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P57_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "8. Ahora le voy a leer algunas opiniones sobre el sistema político en el Perú y quiero que me indique con cuál de esas opiniones está usted más de acuerdo. ")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P57_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P57_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P57_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P57_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P57_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P57_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P58_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "9. En general, ¿qué tan satisfecho está usted con el funcionamiento de la democracia en el Perú")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P58_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P58_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P58_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P58_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P58_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P58_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P59_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "10. ¿Según la ley de paridad y alternancia, que promueve la participación de la mujer…?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P59_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P59_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P59_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P59_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P59_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P59_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P60_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  a. Honestidad")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P60_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P60_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P60_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P60_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P60_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P60_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P61_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  b. Buena preparación")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P61_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P61_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P61_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P61_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P61_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P61_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P62_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  c. Responsabilidad y compromiso")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P62_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P62_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P62_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P62_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P62_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P62_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P63_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  d. Seguridad y autoconfianza")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P63_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P63_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P63_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P63_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P63_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P63_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P64_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  e. Firmeza y autoridad")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P64_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P64_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P64_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P64_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P64_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P64_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P65_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  f. Experiencia en gestión y administración")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P65_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P65_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P65_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P65_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P65_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P65_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P66_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  g. Experiencia política")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P66_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P66_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P66_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P66_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P66_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P66_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P67_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  h. Vocación política")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P67_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P67_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P67_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P67_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P67_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P67_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P68_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  i. Carisma")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P68_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P68_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P68_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P68_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P68_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P68_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P69_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  j. Liderazgo")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P69_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P69_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P69_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P69_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P69_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P69_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P70_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  k. Objetivos y metas claras")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P70_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P70_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P70_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P70_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P70_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P70_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P71_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  l. Preocupación y sensibilidad por problemas de la gente")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P71_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P71_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P71_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P71_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P71_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P71_1, ASE_1$nse2))  
+salto()
+```
+```{r}
+ASE_1 %>% 
+  tabla_pulso(P72_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  m. Respeto por las normas y la justicia")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P72_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P72_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P72_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P72_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P72_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P72_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P73_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  n. Capacidad para desarrollar muchas tareas a la vez")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P73_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P73_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P73_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P73_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P73_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P73_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P74_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  o. Capacidad de lucha en el logro de objetivos y metas")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P74_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P74_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P74_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P74_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P74_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P74_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P75_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "11. ¿a un político hombre, a una política mujer, o a ambos por igual?  p. Agresividad")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P75_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P75_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P75_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P75_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P75_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P75_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P76_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? a. Salud")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P76_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P76_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P76_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P76_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P76_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P76_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P77_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? b. Educación")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P77_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P77_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P77_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P77_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P77_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P77_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P78_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? c. Seguridad ciudadana y delincuencia")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P78_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P78_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P78_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P78_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P78_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P78_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P79_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? d. Problemas locales y comunitarios")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P79_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P79_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P79_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P79_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P79_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P79_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P80_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? e. Problemas de justicia")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P80_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P80_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P80_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P80_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P80_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P80_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P81_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? f. Vivienda")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P81_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P81_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P81_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P81_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P81_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P81_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P82_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? g. Transporte público")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P82_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P82_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P82_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P82_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P82_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P82_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P83_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? h. Desempleo")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P83_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P83_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P83_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P83_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P83_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P83_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P84_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? i. Pobreza y canasta básica")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P84_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P84_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P84_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P84_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P84_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P84_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P85_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? j. Corrupción")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P85_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P85_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P85_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P85_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P85_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P85_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P86_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? k. Familia e infancia")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P86_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P86_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P86_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P86_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P86_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P86_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P87_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? l. Población LGTBQ+")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P87_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P87_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P87_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P87_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P87_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P87_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P88_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? m. Violencia contra las mujeres")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P88_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P88_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P88_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P88_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P88_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P88_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P89_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? n. Derechos de las mujeres")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P89_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P89_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P89_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P89_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P89_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P89_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P90_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? o. Abastecimiento de agua y desagüe")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P90_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P90_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P90_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P90_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P90_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P90_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P91_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? p. Problemas de medio ambiente")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P91_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P91_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P91_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P91_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P91_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P91_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P92_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? q. Alimentación")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P92_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P92_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P92_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P92_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P92_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P92_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P93_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? r. Discriminación contra la mujer")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P93_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P93_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P93_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P93_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P93_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P93_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P94_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "12. Y, del siguiente listado de temas, ¿a quién considera usted que le preocupan más? ¿a un político hombre, a una política mujer, o a ambos por igual? s. Ausencia de mujeres en el poder")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P94_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P94_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P94_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P94_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P94_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P94_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P95_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "13. Una persona que participa en política debe enfrentar algunos riesgos, como los que voy a mencionar a continuación. En su opinión a. La exposición pública")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P95_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P95_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P95_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P95_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P95_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P95_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P96_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "13. Una persona que participa en política debe enfrentar algunos riesgos, como los que voy a mencionar a continuación. En su opinión b. La violencia política")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P96_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P96_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P96_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P96_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P96_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P96_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P97_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "13. Una persona que participa en política debe enfrentar algunos riesgos, como los que voy a mencionar a continuación. En su opinión c. El desgaste de estar en el poder")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P97_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P97_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P97_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P97_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P97_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P97_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P98_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "13. Una persona que participa en política debe enfrentar algunos riesgos, como los que voy a mencionar a continuación. En su opinión d. La pérdida de la vida familiar")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P98_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P98_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P98_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P98_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P98_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P98_1, ASE_1$nse2))  
+salto()
+
+```
+```{r}
+
+ASE_1 %>% 
+  tabla_pulso(P100_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "14. Le voy a leer una lista de características y quiero que usted me diga si usted considera que esa característica a. Buena apariencia física")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P100_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P100_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P100_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P100_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P100_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P100_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P101_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "14. Le voy a leer una lista de características y quiero que usted me diga si usted considera que esa característica b. Respaldo de un partido político")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P101_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P101_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P101_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P101_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P101_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P101_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P102_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "14. Le voy a leer una lista de características y quiero que usted me diga si usted considera que esa característica c. Buena preparación")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P102_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P102_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P102_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P102_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P102_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P102_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P103_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "14. Le voy a leer una lista de características y quiero que usted me diga si usted considera que esa característica d. Carácter fuerte y agresivo")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P103_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P103_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P103_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P103_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P103_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P103_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P104_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "15. En las recientes elecciones regionales y municipales del 2 de octubre, ¿Votó usted por una candidata mujer …?  a. CALLAO Y CIUDADES DEL INTERIOR: Para gobernadora regional")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P104_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P104_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P104_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P104_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P104_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P104_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P105_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "15. En las recientes elecciones regionales y municipales del 2 de octubre, ¿Votó usted por una candidata mujer …?  b. Para alcaldesa provincial")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P105_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P105_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P105_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P105_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P105_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P105_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P106_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "15. En las recientes elecciones regionales y municipales del 2 de octubre, ¿Votó usted por una candidata mujer …?  c. Para alcaldesa distrital")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P106_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P106_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P106_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P106_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P106_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P106_1, ASE_1$nse2))  
+salto()
+
+```
+```{r}
+#107
+
+ASE_1 %>% 
+  filter(!is.na(P107_1))  %>%
+  tabla_pulso(starts_with("P107."), c(sexo, edad, aregion, educa1, mape, nse2), titulo = "16.  ¿Por qué no votó por una candidata mujer? Por favor, indique una o dos razones que usted considere más importantes.")
+salto()
+
+```
+```{r}
+ASE_1 %>% 
+  tabla_pulso(P109_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "17. ¿Por qué cree que hay tan pocas mujeres en los gobiernos regionales?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P109_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P109_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P109_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P109_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P109_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P109_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P111_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  a. Una madre que trabaja puede tener con sus hijos una relación tan cálida y estable como una madre que no trabaja")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P111_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P111_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P111_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P111_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P111_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P111_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P112_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  b. Es probable que a un niño en edad prescolar le perjudique que su madre trabaje")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P112_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P112_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P112_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P112_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P112_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P112_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P113_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  c. Cuando la mujer tiene un trabajo a jornada completa")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P113_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P113_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P113_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P113_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P113_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P113_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P114_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  d. Trabajar está bien, pero lo que la mayoría de las mujeres realmente quiere es formar un hogar y tener hijos")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P114_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P114_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P114_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P114_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P114_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P114_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P115_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  e. Ser ama de casa es tan gratificante como trabajar por un salario")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P115_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P115_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P115_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P115_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P115_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P115_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P116_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  f. El deber de un hombre es ganar dinero; el deber de")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P116_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P116_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P116_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P116_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P116_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P116_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P117_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  g. Una madre sola puede criar a un hijo tan bien como")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P117_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P117_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P117_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P117_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P117_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P117_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P118_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  h. Un padre solo puede criar a un hijo tan bien como el padre y la madre juntos")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P118_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P118_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P118_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P118_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P118_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P118_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P119_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  i. Una pareja de mujeres lesbianas puede criar a un hijo tan bien como una pareja de hombre y mujer")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P119_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P119_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P119_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P119_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P119_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P119_1, ASE_1$nse2))  
+salto()
+
+```
+```{r}
+
+ASE_1 %>% 
+  tabla_pulso(P120_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  j. Una pareja de hombres homosexuales puede criar a un hijo tan bien como una pareja de hombre y mujer")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P120_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P120_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P120_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P120_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P120_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P120_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P121_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "18. ¿Podría decirme si está Ud. muy de acuerdo, de acuerdo, en desacuerdo o muy en desacuerdo con cada una de las frASE_1s que le voy a leer?  k. Las mujeres que participan en política descuidan el")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P121_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P121_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P121_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P121_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P121_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P121_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P122_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "19. ¿diría usted que seguir estudios superiores es…?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P122_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P122_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P122_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P122_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P122_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P122_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P123_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20 a. Ministro o ministra de estado")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P123_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P123_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P123_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P123_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P123_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P123_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P124_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20 b. Rector o rectora de una universidad")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P124_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P124_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P124_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P124_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P124_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P124_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P125_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20 c. Alto ejecutivo o ejecutiva de una gran empresa")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P125_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P125_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P125_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P125_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P125_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P125_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P126_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20 d. Gobernador o gobernadora regional")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P126_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P126_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P126_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P126_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P126_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P126_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P127_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20 e. Alcalde o alcaldesa provincial")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P127_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P127_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P127_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P127_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P127_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P127_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P128_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20 f. Alcalde o alcaldesa distrital")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P128_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P128_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P128_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P128_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P128_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P128_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P129_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20 g. Presidente o presidenta de la República")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P129_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P129_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P129_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P129_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P129_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P129_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P130_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "21. ¿Qué tan de acuerdo o en desacuerdo estaría usted con las siguientes medidas para alcanzar la equidad de género?  a. Cuotas o cantidades mínimas para aumentar el número de puestos para mujeres en el gobierno.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P130_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P130_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P130_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P130_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P130_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P130_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P131_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "21. ¿Qué tan de acuerdo o en desacuerdo estaría usted con las siguientes medidas para alcanzar la equidad de género?  b. Cuotas o cantidades mínimas para aumentar el número de vacantes para mujeres en las universidades.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P131_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P131_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P131_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P131_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P131_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P131_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P132_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "21. ¿Qué tan de acuerdo o en desacuerdo estaría usted con las siguientes medidas para alcanzar la equidad de género?  c. Cuotas o cantidades mínimas para aumentar el número de mujeres en posiciones gerenciales.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P132_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P132_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P132_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P132_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P132_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P132_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P133_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "22. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo. a. Está bien que un hombre golpee a su pareja, si ella no quiere tener relaciones sexuales con él.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P133_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P133_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P133_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P133_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P133_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P133_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P134_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "22. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo. b. Una mujer debe tolerar la violencia de su pareja para mantener a su familia unida.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P134_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P134_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P134_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P134_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P134_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P134_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P135_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "22. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo. c. Hay ocasiones en que las mujeres merecen ser golpeadas.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P135_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P135_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P135_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P135_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P135_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P135_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P136_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "22. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo. d. Está bien que la mujer denuncie a la policía por los actos de agresión de su pareja.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P136_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P136_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P136_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P136_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P136_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P136_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P137_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "22. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo. e. Cuando una mujer es violada, por lo general ella lo provocó.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P137_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P137_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P137_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P137_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P137_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P137_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P138_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "22. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo. f. Si una mujer no se defiende físicamente, no se puede decir que fue violación.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P138_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P138_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P138_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P138_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P138_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P138_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P139_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "23. Hablando ahora de las leyes y políticas públicas para enfrentar la violencia contra la mujer en el país, qué tan de acuerdo estaría usted con las siguientes afirmaciones. a. En la educación de niños y adolescentes es importante que se incorpore el enfoque de género, es decir que hombres y mujeres tengan igualdad de oportunidades, derechos y deberes.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P139_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P139_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P139_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P139_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P139_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P139_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P140_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "23. Hablando ahora de las leyes y políticas públicas para enfrentar la violencia contra la mujer en el país, qué tan de acuerdo estaría usted con las siguientes afirmaciones. b. Tal como están, las leyes no proporcionan suficiente protección a las víctimas de violencia.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P140_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P140_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P140_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P140_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P140_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P140_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P141_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "23. Hablando ahora de las leyes y políticas públicas para enfrentar la violencia contra la mujer en el país, qué tan de acuerdo estaría usted con las siguientes afirmaciones. c. Tal como están, las leyes son muy duras para los hombres.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P141_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P141_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P141_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P141_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P141_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P141_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P142_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "23. Hablando ahora de las leyes y políticas públicas para enfrentar la violencia contra la mujer en el país, qué tan de acuerdo estaría usted con las siguientes afirmaciones. d. Tal como están, las leyes hacen que para las mujeres sea muy fácil presentar cargos por violencia contra los hombres.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P142_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P142_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P142_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P142_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P142_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P142_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P143_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "24. Ahora quisiera saber si usted  a.  ¿Ha escuchado de alguna campaña o actividad en su lugar residencia o de trabajo que trate sobre prevención de la violencia hacia las mujeres?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P143_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P143_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P143_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P143_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P143_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P143_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P144_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "24. Ahora quisiera saber si usted  b. ¿Está a favor de la Estrategia Nacional de prevención de la violencia hacia las mujeres?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P144_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P144_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P144_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P144_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P144_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P144_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P145_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "24. Ahora quisiera saber si usted  c. ¿Se considera usted una persona feminista?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P145_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P145_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P145_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P145_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P145_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P145_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P146_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "25. ¿Qué tan de acuerdo o en desacuerdo está usted con las campañas de prevención de la violencia hacia las mujeres?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P146_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P146_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P146_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P146_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P146_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P146_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P147_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "26. Con relación a los avances en la equidad de género,¿usted diría que, en el país, se ha avanzado…")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P147_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P147_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P147_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P147_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P147_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P147_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P148_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "27. Y con relación a la prevención de la violencia contra la mujer, ¿usted diría que, en el país, se ha avanzado…")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P148_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P148_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P148_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P148_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P148_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P148_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P149_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "28. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo con cada una.  a. Un hombre de verdad es el que manda.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P149_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P149_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P149_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P149_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P149_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P149_1, ASE_1$nse2))  
+salto()
+```
+```{r}
+
+ASE_1 %>% 
+  tabla_pulso(P150_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "28. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo con cada una.  b. Un hombre de verdad es el que defiende su reputación con la fuerza si es necesario.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P150_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P150_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P150_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P150_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P150_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P150_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P151_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "28. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo con cada una.  c. Un hombre de verdad es el que tiene la última palabra.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P151_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P151_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P151_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P151_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P151_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P151_1, ASE_1$nse2))  
+salto()
+
+#151 no está completa la oración en la BD
+
+ASE_1 %>% 
+  tabla_pulso(P152_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "28. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo con cada una.  d. Un hombre de verdad es el que sólo tiene relaciones sexuales con mujeres.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P152_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P152_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P152_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P152_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P152_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P152_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P153_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "28. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo con cada una.  e. Un hombre de verdad no tendría un amigo homosexual.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P153_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P153_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P153_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P153_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P153_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P153_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P154_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "28. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo con cada una.  f. Un hombre de verdad no se comporta como una mujer.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P154_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P154_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P154_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P154_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P154_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P154_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P155_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "28. Con relación a las siguientes afirmaciones, diga usted si está de acuerdo o en desacuerdo con cada una.  g. Un hombre de verdad se avergonzaría de tener un hijo homosexual.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P155_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P155_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P155_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P155_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P155_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P155_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P156_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "29. ¿En cuáles de las siguientes situaciones que voy a leer justificaría usted que un hombre reaccione con violencia hacia un hombre homosexual? a. Si un hombre homosexual insiste en coquetearle o seducirle.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P156_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P156_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P156_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P156_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P156_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P156_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P157_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "29. ¿En cuáles de las siguientes situaciones que voy a leer justificaría usted que un hombre reaccione con violencia hacia un hombre homosexual? b. Si un hombre homosexual no despega su mirada de él (cuando lo mira fijamente).")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P157_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P157_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P157_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P157_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P157_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P157_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P158_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "29. ¿En cuáles de las siguientes situaciones que voy a leer justificaría usted que un hombre reaccione con violencia hacia un hombre homosexual? c. Si un hombre homosexual se está besando en la boca con otro hombre en público.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P158_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P158_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P158_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P158_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P158_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P158_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P159_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "29. ¿En cuáles de las siguientes situaciones que voy a leer justificaría usted que un hombre reaccione con violencia hacia un hombre homosexual? d. Si un hombre homosexual actúa de una manera afeminada.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P159_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P159_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P159_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P159_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P159_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P159_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P160_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "30. Ahora me gustaría preguntarle sobre algunos aspectos de sus relaciones familiares. a. Fue golpeado(a) o castigado(a) físicamente por sus padres u otros adultos en su hogar.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P160_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P160_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P160_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P160_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P160_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P160_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P161_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "30. Ahora me gustaría preguntarle sobre algunos aspectos de sus relaciones familiares. b. Fue insultado(a) o humillado(a) por alguien de su familia en frente de otras personas.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P161_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P161_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P161_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P161_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P161_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P161_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P162_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "30. Ahora me gustaría preguntarle sobre algunos aspectos de sus relaciones familiares. c. Vio o escuchó que su madre fue golpeada por su padre o pareja.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P162_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P162_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P162_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P162_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P162_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P162_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P163_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "30. Ahora me gustaría preguntarle sobre algunos aspectos de sus relaciones familiares. d. Fue testigo de 'lorneo' o 'mariconeo' de niños o adolescentes hombres en su escuela o en su barrio")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P163_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P163_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P163_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P163_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P163_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P163_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P164_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "30. Ahora me gustaría preguntarle sobre algunos aspectos de sus relaciones familiares. e. Fue testigo de que el “lorneo” o “mariconeo” de niños o adolescentes hombres terminó en violencia física en su escuela o en su barrio.")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P164_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P164_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P164_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P164_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P164_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P164_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P165_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "31. Ahora quisiera que me cuente si es usted usuario de las siguientes redes sociales… a. Facebook")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P165_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P165_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P165_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P165_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P165_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P165_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P166_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "31. Ahora quisiera que me cuente si es usted usuario de las siguientes redes sociales… b. Twitter")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P166_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P166_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P166_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P166_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P166_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P166_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P167_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "31. Ahora quisiera que me cuente si es usted usuario de las siguientes redes sociales… c. Instagram")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P167_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P167_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P167_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P167_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P167_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P167_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P168_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "31. Ahora quisiera que me cuente si es usted usuario de las siguientes redes sociales… d. Tik tok")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P168_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P168_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P168_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P168_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P168_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P168_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P170_cod_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "31. Ahora quisiera que me cuente si es usted usuario de las siguientes redes sociales… e. Whatsapp")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P170_cod_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P170_cod_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P170_cod_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P170_cod_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P170_cod_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P170_cod_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P169_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "31. Ahora quisiera que me cuente si es usted usuario de las siguientes redes sociales… e. Otros")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P169_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P169_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P169_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P169_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P169_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P169_1, ASE_1$nse2))  
+salto()
+
+#170 - Pregunta abierta
+
+ASE_1 %>% 
+  tabla_pulso(P171_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "32. ¿Con qué frecuencia comparte algún tipo de contenido en sus perfiles de redes sociales?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P171_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P171_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P171_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P171_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P171_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P171_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P172_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? a. Ha recibido amenazas y extorsión")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P172_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P172_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P172_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P172_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P172_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P172_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P173_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? b. Han publicado información sobre su vida privada sin su consentimiento")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P173_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P173_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P173_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P173_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P173_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P173_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P174_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? c. Han subido videos o fotos comprometedoras")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P174_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P174_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P174_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P174_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P174_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P174_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P175_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? d. Han hackeado sus cuentas o han publicado perfiles falsos suyos")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P175_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P175_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P175_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P175_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P175_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P175_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P176_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? e. Se han dirigido campañas de desprestigio o maltrato contra usted")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P176_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P176_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P176_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P176_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P176_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P176_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P177_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? f. Ha sido víctima de acoso sexual")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P177_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P177_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P177_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P177_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P177_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P177_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P178_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? g. Han lanzado mensajes agresivos contra usted referidos a su imagen corporal")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P178_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P178_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P178_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P178_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P178_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P178_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P179_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? h. Han lanzado mensajes agresivos contra usted referidos a tu capacidad intelectual")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P179_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P179_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P179_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P179_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P179_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P179_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P180_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? i. Han lanzado mensajes agresivos contra usted referidos a su color de piel, raza o etnia")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P180_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P180_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P180_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P180_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P180_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P180_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P181_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "33. ¿Alguna vez usted ha sufrido los siguientes tipos de violencia en las redes sociales? j. Otros [ESPECIFICAR]")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P181_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P181_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P181_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P181_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P181_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P181_1, ASE_1$nse2))  
+salto()
+
+#182: pregunta abierta
+
+```
+```{r} 
+
+#183
+
+ASE_1 %>% 
+  filter(!is.na(P183_1))  %>%
+  tabla_pulso(starts_with("P183."), c(sexo, edad, aregion, educa1, mape, nse2), titulo = "34. En qué ámbito de su vida se ha presentado la violencia en redes? Puede señalar más de un ámbito de su vida.")
+salto()
+
+```
+```{r}
+ASE_1 %>% 
+  tabla_pulso(P184_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "35. ¿Cuántas habitaciones tiene en su hogar que actualmente use exclusivamente para dormir?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P184_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P184_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P184_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P184_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P184_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P184_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P185_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "36. ¿Cuántas personas viven permanentemente en el hogar (sin incluir servicio doméstico)?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P185_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P185_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P185_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P185_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P185_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P185_1, ASE_1$nse2))  
+salto()
+
+
+ASE_1 %>% 
+  tabla_pulso(P186_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "37. ¿Cuántos hijos tiene o ha tenido Ud.?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P186_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P186_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P186_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P186_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P186_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P186_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P187_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "38. ¿Convive Ud. en pareja en la actualidad?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P187_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P187_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P187_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P187_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P187_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P187_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P188_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "39. ¿El material predominante en los pisos de su vivienda es…")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P188_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P188_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P188_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P188_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P188_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P188_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P190_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "41. El sistema de prestación de seguro de salud al cual está afiliado usted es…?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P190_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P190_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P190_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P190_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P190_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P190_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P192_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "43. ¿Cuál es el nivel de instrucción de la persona que aporta más ingresos a su hogar?")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P192_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P192_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P192_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P192_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P192_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P192_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P193_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "44. ¿El sistema de prestación de seguro de salud al cual está afiliada la persona que aporta más ingresos a su hogar es…? ")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P193_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P193_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P193_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P193_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P193_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P193_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P194_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "45. Usted en su hogar, ¿cuenta con alguno de los siguientes bienes, artefactos o servicios?a. Computadora o laptop en funcionamiento")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P194_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P194_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P194_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P194_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P194_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P194_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P195_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "45. Usted en su hogar, ¿cuenta con alguno de los siguientes bienes, artefactos o servicios? a. Refrigeradora / congeladora en funcionamiento")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P195_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P195_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P195_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P195_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P195_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P195_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P196_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "45. Usted en su hogar, ¿cuenta con alguno de los siguientes bienes, artefactos o servicios? b. Lavadora en funcionamiento")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P196_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P196_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P196_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P196_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P196_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P196_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P197_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "45. Usted en su hogar, ¿cuenta con alguno de los siguientes bienes, artefactos o servicios? c. Horno microondas en funcionamiento")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P197_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P197_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P197_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P197_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P197_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P197_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P198_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "45. Usted en su hogar, ¿cuenta con alguno de los siguientes bienes, artefactos o servicios? d. Teléfono fijo en funcionamiento")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P198_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P198_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P198_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P198_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P198_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P198_1, ASE_1$nse2))  
+salto()
+
+ASE_1 %>% 
+  tabla_pulso(P199_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "45. Usted en su hogar, ¿cuenta con alguno de los siguientes bienes, artefactos o servicios? e. Conexión a Internet")
+salto()
+
+chisq.posthoc.test1(table(ASE_1$P199_1, ASE_1$sexo))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P199_1, ASE_1$edad))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P199_1, ASE_1$aregion))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P199_1, ASE_1$educa1))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P199_1, ASE_1$mape))  
+salto()
+chisq.posthoc.test1(table(ASE_1$P199_1, ASE_1$nse2))  
+salto()
+
+```
+
+<!---BLOCK_LANDSCAPE_STOP--->
