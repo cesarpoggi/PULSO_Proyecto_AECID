@@ -2,8 +2,8 @@ library(dplyr)
 library(readxl)
 library(labelled)
 
-ForLabels <- read_excel("ASE_MOD.xls", sheet = "Base")
-ASE <- read_excel("ASE_MOD.xls", sheet = "Base", skip = 2)
+ForLabels <- read_excel("ASE_OG.xls", sheet = "Base")
+ASE <- read_excel("ASE_OG.xls", sheet = "Base", skip = 2)
 
 ForLabels <- ForLabels[c(1,2),]
 
@@ -595,7 +595,6 @@ ASE_1<-
                         "Posgrado", 
                         "NS/NR"))),
   )
-
 
 
 DataPrueba <- ASE_1[c(1:231)]
