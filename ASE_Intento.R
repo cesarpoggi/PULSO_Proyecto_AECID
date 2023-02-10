@@ -9,7 +9,16 @@ ForLabels <- ForLabels[c(1,2),]
 
 first_row_vector = as.character(ForLabels[1, ])
 
-
+ASE_1<-
+  ASE %>%
+  sjlabelled::var_labels(
+  P10_1 = "13.a. Una persona que participa en política debe afrontar algunos riesgos, como los que voy a mencionar a continuación. En su opinión ¿a quién le afecta más? ¿a un político hombre, una política mujer, o ambos por igual?",
+  edad = "Edad",
+  aregion = "Lima y regiones",
+  educa1 = "Grado educativo",
+  mape = "Mención de acoso político",
+  nse2 = "Nivel socio-económico"
+)
 
 ASE_1<-
   ASE %>% 
@@ -176,7 +185,7 @@ ASE_1<-
   
   #RENOMBRANDO VARIABLES
   sjlabelled::var_labels(
-    sexo = "Sexo",
+    P10_1 = "13.a. Una persona que participa en política debe afrontar algunos riesgos, como los que voy a mencionar a continuación. En su opinión ¿a quién le afecta más? ¿a un político hombre, una política mujer, o ambos por igual?",
     edad = "Edad",
     aregion = "Lima y regiones",
     educa1 = "Grado educativo",
