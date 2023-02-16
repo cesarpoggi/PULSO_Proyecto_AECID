@@ -1,0 +1,118 @@
+---
+title: "Revisión"
+author: "Cesar Poggi"
+date: "2023-02-15"
+output: pdf_document
+---
+```{r}
+library(haven)
+ASE_Intento_V2 <- 
+  read_sav("C:/Users/Alejandro/Dropbox/PULSO_Proyecto_AECID/ASE_Intento_V2.sav")
+```
+
+# Hallazgos Principales
+
+-> Hay valores de variable que no aparecen en la data (especialemente los valores 8, 9 y 99). Esto debido a que se recodificaron para hacer el informe que se envió al cliente. Ahora estos valores aparecen resumidos en otros valores (como 3 u 7). Cabe mencionar que esto no sucede en todas las variables y que esta recodificación no fue contemplada en el diseño de la encuesta ni en la etapa de digitación, sino que se dió en la parte de procesamiento.
+
+-> No es consistente la forma en la que se reportan las "no-respuestas" de las variables afectadas por los saltos. En algunos casos están como valores NA, en otros casos están recodificados para que se muestren como "NS/NR", el cual puede tomar valores de 3, 7 u 8. 
+
+-> Hay algunas observaciones que han omitido los saltos y han respondido de igual forma en las preguntas/variables afectadas por los saltos.
+
+-> El resto de los saltos están bien.
+
+
+
+## Salto 1: Aceptar ser parte en la investigación
+```{r}
+#Resumen de la cantidad de observaciones de las variables, según opción
+table(ASE_Intento_V2$P2_1)
+```
+El output indica que todos los casos fueron personas que aceptaron participar.
+
+
+## Salto 2: Ser peruano y vivir en la vivienda
+```{r}
+#Resumen de la cantidad de observaciones de las variables, según opción
+table(ASE_Intento_V2$P8_1)
+```
+El output indica que todos los casos son de peruanos que viven en la vivienda consignada al momento de la llamada.
+
+
+## Salto 3: Ser mayor de edad y tener hasta 70 años
+```{r}
+#Resumen de la cantidad de observaciones de las variables, según opción
+table(ASE_Intento_V2$P9_1)
+```
+El output indica que todos los casos son de personas mayores de edad hastas los 70 años.
+
+
+## Salto 4: Haber votado por una mujer a cargos políticos
+### Pregunta de Salto: 15 (variables P104_1, P105_1 y P106_1)
+### Saltar si: El valor de al menos una de las variables es 1
+### Pregunta(s) omitidas(s) por el Salto: 16 (variables P107_1 y P107_2)
+```{r}
+#Resumen de la cantidad de observaciones de las variables, según opción
+table(ASE_Intento_V2$P104_1, useNA = "ifany")
+table(ASE_Intento_V2$P105_1, useNA = "ifany")
+table(ASE_Intento_V2$P106_1, useNA = "ifany")
+
+ASE_Intento_V2$VotoxMujer <- ifelse(ASE_Intento_V2$P104_1 == 1 | 
+                                      ASE_Intento_V2$P105_1 == 1 | 
+                                      ASE_Intento_V2$P106_1 == 1, 1, 0)
+
+table(ASE_Intento_V2[with(ASE_Intento_V2, VotoxMujer == 1),]$P107_1, useNA = "ifany")
+table(ASE_Intento_V2[with(ASE_Intento_V2, VotoxMujer == 1),]$P107_2, useNA = "ifany")
+```
+A pesar de que la encuesta indica que los "no sabe" y los "no contesta" se codifican como 8 y 9 respectivamente, no encontramos estos valores en la data para las variables P104_1, P105_1 y P106_1. En ves de esto encontramos varias observaciones con el valor 3, debido a la recodificación. 
+
+Por otro lado, a pesar de que marcar con 1 en cualquiera de las tres variables anteriores supone un salto de la pregunta 16 (variables P171_1 y P171_2), tenemos 27 casos que marcaron opciones para la P171_1 y otros 12 casos para la variable P171_2.
+
+
+## Salto 5: No haber recibido amenazas en redes
+### Pregunta de Salto: 33 (variables desde P172_1 a P181_1 )
+### Saltar si: El valor de todas variables es 2
+### Pregunta(s) omitidas(s) por el Salto: 34 (desde P183_1 a la P183_3)
+```{r}
+#Resumen de la cantidad de observaciones de las variables, según opción
+table(ASE_Intento_V2$P172_1, useNA = "ifany")
+table(ASE_Intento_V2$P173_1, useNA = "ifany")
+table(ASE_Intento_V2$P174_1, useNA = "ifany")
+table(ASE_Intento_V2$P175_1, useNA = "ifany")
+table(ASE_Intento_V2$P176_1, useNA = "ifany")
+table(ASE_Intento_V2$P177_1, useNA = "ifany")
+table(ASE_Intento_V2$P178_1, useNA = "ifany")
+table(ASE_Intento_V2$P179_1, useNA = "ifany")
+table(ASE_Intento_V2$P180_1, useNA = "ifany")
+table(ASE_Intento_V2$P181_1, useNA = "ifany")
+
+
+ASE_Intento_V2$nv_Redes <- ifelse(ASE_Intento_V2$P172_1 == 2 & 
+                                    ASE_Intento_V2$P173_1 == 2 & 
+                                    ASE_Intento_V2$P174_1 == 2 & 
+                                    ASE_Intento_V2$P175_1 == 2 & 
+                                    ASE_Intento_V2$P176_1 == 2 & 
+                                    ASE_Intento_V2$P177_1 == 2 & 
+                                    ASE_Intento_V2$P178_1 == 2 & 
+                                    ASE_Intento_V2$P179_1 == 2 & 
+                                    ASE_Intento_V2$P180_1 == 2 & 
+                                    ASE_Intento_V2$P181_1 == 2, 1, 0)
+
+
+table(ASE_Intento_V2[with(ASE_Intento_V2, nv_Redes == 1),]$P183_1, useNA = "ifany")
+table(ASE_Intento_V2[with(ASE_Intento_V2, nv_Redes == 1),]$P183_2, useNA = "ifany")
+table(ASE_Intento_V2[with(ASE_Intento_V2, nv_Redes == 1),]$P183_3, useNA = "ifany")
+```
+Para cada una de las diez varaibles que conforman la pregunta 33 (de la variable P172_1 a la 181_1), no encontramos ningun caso con valores 8 u 9, correspondiente a "no sabe" y "no contesta", sino valores 3, que representa la etiqueta "NS/NR". Esto debido a la recodificación.
+
+Encontramos que todos los valores de la pregunta 34 (variable P183_1) son NA cuando todos los valores de la pregunta 33 (de la variable P172_1 a la 181_1) son 2. Esto quiere decir que se respeta el salto cuando la persona no sufrió violencia por redes.
+
+
+## Salto 6: Ser la persona que aporta más en el hogar
+### Pregunta de Salto: 42 (Variable P191_1)
+### Saltar si: El valor de pregunta 42 es 1 o 2
+### Pregunta(s) omitidas(s) por el Salto: 43 y 44 (variables P192_1 y P193_1)
+```{r}
+table(ASE_Intento_V2[with(ASE_Intento_V2, P191_1 == 1 | P191_1 == 2),]$P192_1, useNA = "ifany")
+table(ASE_Intento_V2[with(ASE_Intento_V2, P191_1 == 1 | P191_1 == 2),]$P193_1, useNA = "ifany")
+```
+Encontramos que cuando la pregunta 32 (variable 191_1) tiene el valor de 1 o 2, las preguntas 43 y 44 (variables 192_3 y 192_4) presentan 620 casos de valores 7 y 8, correspondientemente. Estos valores representan en cada caso, la etiqueta "NS/NR". Es decir, que se respeta el saldo cuando la persona entrevistada es la persona que aporta más en el hogar.

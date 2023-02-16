@@ -1,14 +1,14 @@
 library(dplyr)
 library(readxl)
 library(labelled)
+library(haven)
 
-ForLabels <- read_excel("ASE_MOD.xls", sheet = "Base")
-ASE <- read_excel("ASE_MOD.xls", sheet = "Base", skip = 2)
+ForLabels <- read_excel("ASE_OG.xls", sheet = "Base")
+ASE <- read_excel("ASE_OG.xls", sheet = "Base", skip = 2)
 
 ForLabels <- ForLabels[c(1,2),]
 
 first_row_vector = as.character(ForLabels[1, ])
-
 
 
 ASE_1<-
@@ -63,7 +63,7 @@ ASE_1<-
     #P192_2 -> etiquetas agrupadas
     
     P192_2 = as.numeric(P192_1),
-    P192_2 = case_when(
+    edu_mas_ingresos = case_when(
       P192_2 == 1 ~ "Sin nivel",
       P192_2 == 2 ~ "Inicial",
       P192_2 == 3 | P192_2 == 4 ~ "Primaria",
@@ -86,7 +86,8 @@ ASE_1<-
       TRUE ~ 0
     ),
     
-    
+    # La variable P192_1 se convirtió a numerica y se alojó en una nueva varaible P192_2. A partir de esta nueva varaible se creo
+    # la variable N1, asignando una etiqueta de correspondiente según el numero de la varaible P192_2.
     #5.Mención de acoso político
     #99
     P99_1 = as.numeric(ASE$P99_1),
@@ -156,7 +157,7 @@ ASE_1<-
     ###NSE##
     nsep = rowSums(across(c(n1, n2, n3, n4, n5))),
     
-    nse = case_when(
+    nse = case_when( #Nivel Socioeconómico micro
       nsep < 10 ~ "NSE E", 
       nsep >= 10 & nsep < 22 ~ "NSE D", 
       nsep >= 22 & nsep < 26 ~ "NSE C2", 
@@ -167,7 +168,7 @@ ASE_1<-
       nsep >= 49 & nsep <= 50 ~ "NSE A1", 
       TRUE ~ "NS/NR"),
     
-    nse2 = case_when(
+    nse2 = case_when( #Nivelsocioeconómico macro
       nsep < 22 ~ "D/E", 
       nsep >= 22 & nsep < 36 ~ "C", 
       nsep >= 36 & nsep <= 50 ~ "A/B", 
@@ -176,11 +177,11 @@ ASE_1<-
   
   #RENOMBRANDO VARIABLES
   sjlabelled::var_labels(
-    sexo = "Sexo",
-    edad = "Edad",
-    aregion = "Lima y regiones",
-    educa1 = "Grado educativo",
-    mape = "Mención de acoso político",
+    #P10_1 = "Sexo"
+    #P11_1 = "Edad",
+    #P215_2 = "Lima y regiones",
+    #P189_1 = "Grado educativo",
+    #P99_1 = "Mención de acoso político", #mape
     nse2 = "Nivel socio-económico"
   ) %>% 
   
@@ -354,7 +355,7 @@ ASE_1<-
                        TRUE ~ NA_character_),
     P107.5 = case_when(P107_1 == 5| P107_2 == 5 ~ "No me generaban confianza",
                        TRUE ~ NA_character_),
-    P107.6 = case_when(P107_1 == 6| P107_2 == 6 ~ "No tenían posibilidades de gaTRUE ~ NA_characterr",
+    P107.6 = case_when(P107_1 == 6| P107_2 == 6 ~ "No tenían posibilidades de ganar",
                        TRUE ~ NA_character_),
     P107.7 = case_when(P107_1 == 7| P107_2 == 7 ~ "No había candidatas mujeres",
                        TRUE ~ NA_character_),
@@ -597,14 +598,16 @@ ASE_1<-
   )
 
 
+DataP1 <- ASE_1[c(1:231)]
+DataP2 <- ASE_1[c(232:267)]
 
-DataPrueba <- ASE_1[c(1:231)]
-DataPrueba2 <- ASE_1[c(232:267)]
 
+ASE_2_Incompleta <- labelled::set_variable_labels(DataP1, .labels = first_row_vector)
 
-ASE_2 <- labelled::set_variable_labels(DataPrueba, .labels = first_row_vector)
+ASE_2_Incompleta$row_names <- row.names(ASE_2_Incompleta)
+DataP2$row_names <- row.names(DataP2)
 
-ASE_2$row_names <- row.names(ASE_2)
-DataPrueba2$row_names <- row.names(DataPrueba2)
+Data_2_Completa <- left_join(x = ASE_2_Incompleta, y = DataP2, by = "row_names")
+Data_2_Completa <- Data_2_Completa[-c(232)]
 
-DataFinal2 <- left_join(x = ASE_2, y = DataPrueba2, by = "row_names")
+#write_sav(DataFinal2, "ASE_Intento_V2.sav")
