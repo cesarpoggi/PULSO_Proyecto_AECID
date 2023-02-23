@@ -14,13 +14,14 @@ first_row_vector = as.character(ForLabels[1, ])
 ASE_1<-
   ASE %>% 
   mutate(
+    #Se selecciona las variables de cruce 
     #1.SEXO
-    P10_1 = factor(case_when(
+    sexo = case_when(
       P10_1 == 1 ~ "Hombre", 
-      TRUE ~ "Mujer")),
+      TRUE ~ "Mujer"),
     
     #2.EDAD
-    P11_1 = case_when(
+    edad = case_when(
       P11_1 < 30 ~ "18-29", 
       P11_1 >= 30 & P11_1 < 45 ~ "30-44", 
       TRUE ~ "45-70"),
@@ -32,17 +33,17 @@ ASE_1<-
     #sur: AREQUIPA, TACNA, CUSCO, SUR, PUNO = 4
     #oriente: LORETO, UCAYALI, SAN MARTIN =3
     #Lima metropolitana: LIMA, CALLAO = 2
-    P215_2 = P215_1,
-    P215_2 = factor(case_when(
-      P215_1 == "CAJAMARCA" | P215_1 == "LAMBAYEQUE" | P215_1 == "PIURA" | P215_1 == "LA LIBERTAD" | P215_1 == "NORTE" ~ "Norte", 
+    region = P215_1,
+    aregion = factor(case_when(
+      region == "CAJAMARCA" | region == "LAMBAYEQUE" | region == "PIURA" | region == "LA LIBERTAD" | region == "NORTE" ~ "Norte", 
       
-      P215_1 == "AREQUIPA" | P215_1 == "TACNA" | P215_1 == "CUSCO" | P215_1 == "SUR" | P215_1 == "PUNO" ~ "Sur", 
+      region == "AREQUIPA" | region == "TACNA" | region == "CUSCO" | region == "SUR" | region == "PUNO" ~ "Sur", 
       
-      P215_1 == "ANCASH" | P215_1 == "JUNIN" | P215_1 == "HUANUCO" | P215_1 == "HUANCAVELICA" | P215_1 == "AYACUCHO" | P215_1 == "ICA" ~ "Centro", 
+      region == "ANCASH" | region == "JUNIN" | region == "HUANUCO" | region == "HUANCAVELICA" | region == "AYACUCHO" | region == "ICA" ~ "Centro", 
       
-      P215_1 == "LORETO" | P215_1 == "UCAYALI" | P215_1 == "SAN MARTIN" ~ "Oriente", 
+      region == "LORETO" | region == "UCAYALI" | region == "SAN MARTIN" ~ "Oriente", 
       
-      P215_1 == "LIMA" | P215_1 == "CALLAO" ~ "Lima/ Callao", 
+      region == "LIMA" | region == "CALLAO" ~ "Lima/ Callao", 
       
       TRUE ~ "NS/NR"), 
       
@@ -50,7 +51,7 @@ ASE_1<-
     
     #4.Grado educativo
     #4.1. 189 -> encuestado
-    P189_1 = factor(case_when(
+    educa1 = factor(case_when(
       P189_1 == 1 | P189_1 == 2 | P189_1 == 3 | P189_1 == 4 ~ "Primaria o menor",
       P189_1 == 5 | P189_1 == 6 ~ "Secundaria",
       P189_1 == 7 | P189_1 == 8 | P189_1 == 9 | P189_1 == 10 ~ "Superior técnica/ Universitaria",
@@ -59,52 +60,51 @@ ASE_1<-
       levels = c("Primaria o menor", "Secundaria", "Superior técnica/ Universitaria", "Posgrado", "NS/NR")),
     
     
-    #4.2. 192 -> Persona que oporta más ingresos 
-    #P192_2 -> etiquetas agrupadas
+    #4.2. 192 -> educa2 persona que oporta + ingresos 
+    #educa2a -> etiquetas agrupadas
     
-    P192_2 = as.numeric(P192_1),
-    edu_mas_ingresos = case_when(
-      P192_2 == 1 ~ "Sin nivel",
-      P192_2 == 2 ~ "Inicial",
-      P192_2 == 3 | P192_2 == 4 ~ "Primaria",
-      P192_2 == 5 | P192_2 == 6 ~ "Secundaria",
-      P192_2 == 7 | P192_2 == 8 ~ "Superior técnica",
-      P192_2 == 9 | P192_2 == 10 ~ "Superior universitaria",
-      P192_2 == 11 ~ "Posgrado", 
+    educa2 = as.numeric(P192_1),
+    educa2a = case_when(
+      educa2 == 1 ~ "Sin nivel",
+      educa2 == 2 ~ "Inicial",
+      educa2 == 3 | educa2 == 4 ~ "Primaria",
+      educa2 == 5 | educa2 == 6 ~ "Secundaria",
+      educa2 == 7 | educa2 == 8 ~ "Superior técnica",
+      educa2 == 9 | educa2 == 10 ~ "Superior universitaria",
+      educa2 == 11 ~ "Posgrado", 
       TRUE ~ "NS/NR"
     ),
     
     n1 = case_when(
-      P192_2 == 1 ~ 0,
-      P192_2 >1 & P192_2 <= 5 ~ 2,
-      P192_2 == 6 ~ 3,
-      P192_2 == 7 ~ 4, 
-      P192_2 == 8 ~ 5,
-      P192_2 == 9 ~ 7,
-      P192_2 == 10 ~ 9,
-      P192_2 == 11 ~ 10,
+      educa2 == 1 ~ 0,
+      educa2 >1 & educa2 <= 5 ~ 2,
+      educa2 == 6 ~ 3,
+      educa2 == 7 ~ 4, 
+      educa2 == 8 ~ 5,
+      educa2 == 9 ~ 7,
+      educa2 == 10 ~ 9,
+      educa2 == 11 ~ 10,
       TRUE ~ 0
     ),
     
-    # La variable P192_1 se convirtió a numerica y se alojó en una nueva varaible P192_2. A partir de esta nueva varaible se creo
-    # la variable N1, asignando una etiqueta de correspondiente según el numero de la varaible P192_2.
+    
     #5.Mención de acoso político
     #99
-    P99_1 = as.numeric(ASE$P99_1),
-    P99_1 = factor(case_when(
-      P99_1 == 1 ~ "Un político hombre",
-      P99_1 == 2 ~ "Un político mujer",
-      P99_1 == 3 ~ "Ambos por igual",
-      P99_1 == 4 ~ "A ninguno",
+    map = as.numeric(ASE$P99_1),
+    mape = factor(case_when(
+      map == 1 ~ "Un político hombre",
+      map == 2 ~ "Un político mujer",
+      map == 3 ~ "Ambos por igual",
+      map == 4 ~ "A ninguno",
       TRUE ~ "NS/NR"
     ),
     levels = c("Un político hombre", "Un político mujer", "Ambos por igual", "A ninguno", "NS/NR")),
     
     #NSE
-    #N1: P192_2 persona que oporta más ingresos
+    #N1: educa2p persona que oporta + ingresos #educa2p
     #N2: Para obtener el puntaje de N2 se deben sumar los puntajes asignados a 
-    #los artefactos o servicios con los que cuenta el hogar la persona encuestada.
-    #Es decir: P194_1	P195_1	P196_1	P197_1	P198_1	P199_1
+    #los artefactos o servicios con los que cuenta el hogar la persona encuestada. #n2
+    #P194_1	P195_1	P196_1	P197_1	P198_1	P199_1
     
     art1 = case_when(as.numeric(P194_1) == 1~ 3.5,TRUE~0),
     art2 = case_when(as.numeric(P195_1) == 1~ 3.5,TRUE~0),
@@ -157,7 +157,7 @@ ASE_1<-
     ###NSE##
     nsep = rowSums(across(c(n1, n2, n3, n4, n5))),
     
-    nse = case_when( #Nivel Socioeconómico micro
+    nse = case_when(
       nsep < 10 ~ "NSE E", 
       nsep >= 10 & nsep < 22 ~ "NSE D", 
       nsep >= 22 & nsep < 26 ~ "NSE C2", 
@@ -168,22 +168,22 @@ ASE_1<-
       nsep >= 49 & nsep <= 50 ~ "NSE A1", 
       TRUE ~ "NS/NR"),
     
-    nse2 = case_when( #Nivelsocioeconómico macro
+    nse2 = case_when(
       nsep < 22 ~ "D/E", 
       nsep >= 22 & nsep < 36 ~ "C", 
       nsep >= 36 & nsep <= 50 ~ "A/B", 
       TRUE ~ "NS/NR"),
-  ) %>% 
+  ) %>%  
   
   #RENOMBRANDO VARIABLES
   sjlabelled::var_labels(
-    #P10_1 = "Sexo"
-    #P11_1 = "Edad",
-    #P215_2 = "Lima y regiones",
-    #P189_1 = "Grado educativo",
-    #P99_1 = "Mención de acoso político", #mape
+    sexo = "Sexo",
+    edad = "Edad",
+    aregion = "Lima y regiones",
+    educa1 = "Grado educativo",
+    mape = "Mención de acoso político",
     nse2 = "Nivel socio-económico"
-  ) %>% 
+  ) %>%  
   
   mutate(
     #ETIQUETAMIENTO Y ORDENAMIENTO DE NIVELES DE VARIABLES
@@ -453,14 +453,12 @@ ASE_1<-
     #156-159
     across(c(P156_1, P157_1, P158_1, P159_1), 
            ~ factor(case_when(
-             . == 1 ~ "Mucho", 
-             . == 2 ~ "Algo", 
-             . == 3 ~ "Poco", 
-             . == 4 ~ "Nada",
+             . == 1 ~ "Sí se justifica", 
+             . == 2 ~ "No se justifica", 
              . == 8 | . == 9 ~ "NS/NR", 
              TRUE ~ "NS/NR"), 
              
-             levels = c("Mucho", "Algo", "Poco", "Nada", "NS/NR"))),
+             levels = c("Sí se justifica", "No se justifica", "NS/NR"))),
     
     #170 -> otros: pregunta abierta
     
@@ -599,7 +597,7 @@ ASE_1<-
 
 
 DataP1 <- ASE_1[c(1:231)]
-DataP2 <- ASE_1[c(232:267)]
+DataP2 <- ASE_1[c(232:274)]
 
 
 ASE_2_Incompleta <- labelled::set_variable_labels(DataP1, .labels = first_row_vector)
@@ -610,4 +608,4 @@ DataP2$row_names <- row.names(DataP2)
 Data_2_Completa <- left_join(x = ASE_2_Incompleta, y = DataP2, by = "row_names")
 Data_2_Completa <- Data_2_Completa[-c(232)]
 
-#write_sav(DataFinal2, "ASE_Intento_V2.sav")
+#write_sav(Data_2_Completa, "ASE_Intento_V4.sav")
