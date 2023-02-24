@@ -1,0 +1,50 @@
+---
+title: "Untitled"
+author: "Cesar Poggi"
+date: "2023-02-23"
+output: html_document
+---
+```{r}
+library(dplyr)
+library(readxl)
+library(labelled)
+library(haven)
+
+ForLabels <- read_excel("ASE_OG.xls", sheet = "Base")
+ASE <- read_excel("ASE_OG.xls", sheet = "Base", skip = 2)
+
+ForLabels <- ForLabels[c(1,2),]
+
+first_row_vector = as.character(ForLabels[1, ])
+```
+
+
+```{r}
+prueba1 <- ASE[c(195,196,198)] #preguntas 41, 42 y 44 -> seguros de salud
+prueba2 <- ASE[c(194,196,197)] #preguntas 40, 42 y 43 -> nivel educativo
+```
+
+```{r}
+#prueba 1 = seguros de salud
+
+prueba1$premerge <- prueba1$P190_1 #41 seguro salud usted
+prueba1$premerge[prueba1$P191_1 == 3 | prueba1$P191_1 == 8 | prueba1$P191_1 == 9 ] <- NA
+
+prueba1$premerge2 <- prueba1$P193_1 #44 seguro de salud de la persona que mas aporta (otro)
+prueba1$premerge2[prueba1$P191_1 == 1 | prueba1$P191_1 == 2] <- NA
+
+prueba1$SS <- rowSums(prueba1[,c("premerge", "premerge2")], na.rm=TRUE)
+```
+
+```{r}
+#prueba 2 = nivel educativo
+
+prueba2$premerge <- prueba2$P189_1 #41 nivel educativo usted
+prueba2$premerge[prueba2$P191_1 == 3 | prueba2$P191_1 == 8 | prueba2$P191_1 == 9 ] <- NA
+
+prueba2$premerge2 <- prueba2$P192_1 #44 nivel educativo de la persona que mas aporta (otro)
+prueba2$premerge2[prueba2$P191_1 == 1 | prueba2$P191_1 == 2] <- NA
+
+prueba2$NE <- rowSums(prueba2[,c("premerge", "premerge2")], na.rm=TRUE)
+```
+
