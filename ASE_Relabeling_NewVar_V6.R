@@ -816,4 +816,4 @@ Data_2_Completa <- left_join(x = ASE_2_Incompleta, y = DataP2, by = "row_names")
 Data_2_Completa <- Data_2_Completa[-c(232)]
 
 
-write_sav(Data_2_Completa, "ASE_Intento_6.sav")
+write_sav(Data_2_Completa, "ASE_Intento_V6.sav")

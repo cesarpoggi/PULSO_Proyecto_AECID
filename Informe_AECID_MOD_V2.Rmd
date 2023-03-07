@@ -1755,7 +1755,7 @@ salto()
 
 ASE_1 %>% 
   tabla_pulso(P170_cod_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "31.f Ahora quisiera que me cuente si es usted usuario de las siguientes redes sociales: Whatsapp")
-salto()
+salto() #cambiar
 
 
 ASE_1 %>% 

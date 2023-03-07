@@ -89,7 +89,7 @@ ASE_1<-
       levels = c("Primaria o menor", "Secundaria", "Superior técnica/ Universitaria", "Posgrado", "NS/NR")),
     
     
-    #4.2. 192 -> educa2 persona que oporta más ingresos (pasará a ser NE_1que se creó arriba - preguntas 40 y 43)
+    #4.2. 192 -> educa2 persona que oporta más ingresos pasará a ser NE_1que se creó arriba - preguntas 40 y 43)
     
     #educa2a -> etiquetas agrupadas sobre NE
     
@@ -210,9 +210,29 @@ ASE_1<-
     sexo = "Sexo",
     edad = "Edad",
     aregion = "Lima y regiones",
-    educa1 = "Grado educativo de Encuestado",
+    region = "Copia de P215_1",
+    educa1 = "Nivel Educativo Agregado del Encuestado",
+    educa2a = "Nivel Educativo Agregado de quién aporta más (Encuestado u Otro miembro)",
+    map = "Variable P99_1 numérica (acoso politico)",
     mape = "Mención de acoso político",
-    nse2 = "Nivel socio-económico"
+    nsep = "Suma de los Puntajes N",
+    nse = "Nivel socio-económico",
+    nse2 = "Nivel socio-económico agregado",
+    n1 = "Puntaje 1: Nivel Educativo de quién aporta más (entrevistado u otro miembro)",
+    art1 = "Cálculo n2 - Cuenta con computadora o laptop en funcionamiento",
+    art2 = "Cálculo n2 - Cuenta con Refrigeradora/congeladora en funcionamiento",
+    art3 = "Cálculo n2 - Cuenta con Lavadora en funcionamiento",
+    art4 = "Cálculo n2 - Cuenta con Horno Microondas en funcionamiento",
+    art5 = "Cálculo n2 - Cuenta con Teléfono fijo en funcionamiento",
+    art6 = "Cálculo n2 - Cuenta con Conexión a Internet",
+    n2 = "Puntaje 2: Artefactos con los que cuenta el hogar",
+    mpp = "Varible P188_1 numérica (material de pisos)",
+    n3 = "Puntaje 3: Material predominante de pisos",
+    hxm = "Cálculo n4 (habitaciones/personas que viven en el hogar)",
+    n4 = "Puntaje 4: Habitaciones",
+    n5 = "Puntaje 5: Seguro de Salud del Jefe del Hogar",
+    NE_1 = "Nivel Educativo No Agregado de quién aporta más (entrevistado u otro miembro)",
+    SS_1 = "Seguro de Salud de quién aporta más (entrevistado u otro miembro)"
   ) %>%  
   
   mutate(
@@ -644,7 +664,7 @@ ASE_1<-
                         "NS/NR"))),
     
     #192
-    across(c(P192_1), 
+    across(c(P192_1, P189_1), 
            ~ factor(case_when(
              . == 1 | . == 2 ~ "Sin nivel/Inicial",
              . == 3 | . == 4 ~ "Primaria",
@@ -653,7 +673,7 @@ ASE_1<-
              . == 9 | . == 10 ~ "Superior universitaria",
              . == 11 ~ "Posgrado",
              . == 88 | . == 99 ~ "NS/NR",
-             TRUE ~ "NS/NR"), 
+             TRUE ~ "NS/NR"), #no hay
              
              levels = c("Sin nivel/Inicial", 
                         "Primaria", 
@@ -662,8 +682,110 @@ ASE_1<-
                         "Superior universitaria", 
                         "Posgrado", 
                         "NS/NR"))),
-  )
-
+    #107_1, 107_2
+    across(c(P107_1, P107_2),
+           ~ factor(case_when(
+             . == 1 ~ "No concordaba con mi posición e ideas políticas",
+             . == 2 ~ "No tenían buenas propuestas frente a los problemas que me interesan",
+             . == 3 ~ "Por el partido político al que pertenecían",
+             . == 4 ~ "No estaban preparadas para ejercer esos cargos",
+             . == 5 ~ "No me generaban confianza",
+             . == 6 ~ "No tenían posibilidades de ganar",
+             . == 7 ~ "No había candidatas mujeres",
+             . == 8 ~ "Otra razón",
+             . == 88 | . == 99 ~ "NS/NR",
+             TRUE ~ "No aplica"), #999
+             
+             levels = c("No concordaba con mi posición e ideas políticas",
+                        "No tenían buenas propuestas frente a los problemas que me interesan",
+                        "Por el partido político al que pertenecían",
+                        "No estaban preparadas para ejercer esos cargos",
+                        "No me generaban confianza",
+                        "No tenían posibilidades de ganar",
+                        "No había candidatas mujeres",
+                        "Otra razón",
+                        "NS/NR",
+                        "No aplica"))),
+    
+    #183_1, 183_2, 183_3
+    across(c(P183_1, P183_2, P183_3),
+           ~ factor(case_when(
+             . == 1 ~ "Persona y/o familiar",
+             . == 2 ~ "Laboral/trabajo",
+             . == 3 ~ "Estudios",
+             . == 4 ~ "Actividad Política / Opiniones políticas",
+             . == 5 ~ "Actividad Pública",
+             . == 6 ~ "Activismo social",
+             . == 7 ~ "Otros",
+             . == 8 | . == 9 ~ "NS/NR",
+             TRUE ~ "No aplica"), #99
+             
+             levels = c("Persona y/o familiar",
+                        "Laboral/trabajo",
+                        "Estudios",
+                        "Actividad Política / Opiniones políticas",
+                        "Actividad Pública",
+                        "Activismo social",
+                        "Otros",
+                        "NS/NR",
+                        "No aplica")))
+  )%>%
+  
+  sjlabelled::var_labels(
+    P107.1 = "Dummy: No votaron por mujeres porque no concordaban con mi posición e ideas políticas",
+    P107.2 = "Dummy: No votaron por mujeres porque no tenían buenas propuestas frente a los problemas que me interesan",
+    P107.3 = "Dummy: No votaron por mujeres por el partido político al que pertenecían",
+    P107.4 = "Dummy: No votaron por mujeres porque no estaban preparadas para ejercer esos cargos",
+    P107.5 = "Dummy: No votaron por mujeres porque no me generaban confianza",
+    P107.6 = "Dummy: No votaron por mujeres porque no tenían posibilidades de ganar",
+    P107.7 = "Dummy: No votaron por mujeres porque no había candidatas mujeres",
+    P107.8 = "Dummy: No votaron por mujeres por otra razón",
+    P107.9 = "Dummy: No votaron por mujeres - NS/NR",
+    P107.10 = "Dummy: No votaron por mujeres - No Aplica",
+    P183.1 = "Dummy: Ámbito de violencia en redes - Persona y/o familiar",
+    P183.2 = "Dummy: Ámbito de violencia en redes - Laboral/ trabajo",
+    P183.3 = "Dummy: Ámbito de violencia en redes - Estudios",
+    P183.4 = "Dummy: Ámbito de violencia en redes - Actividad política/opiniones políticas",
+    P183.5 = "Dummy: Ámbito de violencia en redes - Actividad pública",
+    P183.6 = "Dummy: Ámbito de violencia en redes - Activismo social",
+    P183.7 = "Dummy: Ámbito de violencia en redes - Otros",
+    P183.8 = "Dummy: Ámbito de violencia en redes - NS/NR",
+    P183.8 = "Dummy: Ámbito de violencia en redes - No Aplica")
+      
+    
+    
+    #189_1
+    #across(c(P189_1),
+    #       ~ factor(case_when(
+    #         . == 1 ~ "Sin nivel",
+    #         . == 2 ~ "Inicial",
+    #         . == 3 ~ "Primaria incompleta",
+    #         . == 4 ~ "Primaria completa",
+    #         . == 5 ~ "Secundaria incompleta",
+    #         . == 6 ~ "Secundaria completa",
+    #         . == 7 ~ "Superior técnica incompleta",
+    #         . == 8 ~ "Superior técnica completa",
+    #         . == 9 ~ "Superior universitaria incompleta",
+    #         . == 10 ~ "Superior universitaria completa",
+    #         . == 11 ~ "Maestría/Doctorado",
+    #         . == 88 | . == 99 ~ "NS/NR",
+    #         TRUE ~ "No aplica"),
+             
+    #         levels = c("Sin nivel",
+    #                    "Inicial",
+    #                    "Primaria incompleta",
+    #                    "Primaria completa",
+    #                    "Secundaria incompleta",
+    #                    "Secundaria completa",
+    #                    "Superior técnica incompleta",
+    #                    "Superior técnica completa",
+    #                    "Superior universitaria incomplta",
+    #                    "Superior universitaria completa",
+    #                    "Maestría/Doctorado",
+    #                    "NS/NR",
+    #                    "No aplica")))
+    
+    
 
 #Eliminar las respuestas de SÍ la variable P104_1 para casos que nos son del CALLAO
 
@@ -695,4 +817,4 @@ Data_2_Completa <- left_join(x = ASE_2_Incompleta, y = DataP2, by = "row_names")
 Data_2_Completa <- Data_2_Completa[-c(232)]
 
 
-write_sav(Data_2_Completa, "ASE_Intento_5.sav")
+write_sav(Data_2_Completa, "ASE_Intento_V7.sav")
