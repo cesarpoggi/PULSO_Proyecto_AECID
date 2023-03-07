@@ -11,7 +11,6 @@ ForLabels <- ForLabels[c(1,2),]
 first_row_vector = as.character(ForLabels[1, ])
 
 
-
 #Crear variable combinada de preguntas 40 y 43 sobre NIVEL EDUCATIVO
 
 ASE$premergeNEusted <- ASE$P189_1 #41 nivel educativo ENTREVISTADO
@@ -237,6 +236,12 @@ ASE_1<-
   
   mutate(
     #ETIQUETAMIENTO Y ORDENAMIENTO DE NIVELES DE VARIABLES
+    across(c(P10_1), 
+           ~ factor(case_when(
+             . == 1 ~ "Hombre", 
+             . == 2 ~ "Mujer", 
+             TRUE ~ "NS/NR"))), 
+    
     across(c(P12_1),
            ~ factor(case_when(
              . == 1 ~ "Muy interesado/a", 
@@ -384,7 +389,9 @@ ASE_1<-
              
              P172_1, P173_1, P174_1, P175_1, P176_1, P177_1, P178_1, P179_1, P180_1, P181_1,
              
-             P187_1, P194_1, P195_1, P196_1, P197_1, P198_1, P199_1
+             P187_1, P194_1, P195_1, P196_1, P197_1, P198_1, P199_1,
+             
+             P2_1, P8_1, P9_1,
     ), 
     ~ factor(case_when(
       . == 1 ~ "Sí", 

@@ -1456,7 +1456,7 @@ salto()
 ```
 ```{r}
 ASE_1 %>% 
-  tabla_pulso(P109_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "17.1 ¿Por qué cree que hay tan pocas mujeres en los gobiernos regionales? Por favor, indíque solo una razón, la principal.")
+  tabla_pulso(P109_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "17.1 ¿Por qué cree que hay tan pocas mujeres en los gobiernos regionales? Por favor, indique solo una razón, la principal.")
 salto()
 
 
@@ -1522,36 +1522,36 @@ salto()
 
 
 ASE_1 %>% 
-  tabla_pulso(P123_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.a Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indíque cuál es la respuesta que se acerca más a su propia opinión: Ministro o ministra de estado")
+  tabla_pulso(P123_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.a Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indique cuál es la respuesta que se acerca más a su propia opinión: Ministro o ministra de estado")
 salto()
 
 
 ASE_1 %>% 
-  tabla_pulso(P124_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.b Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indíque cuál es la respuesta que se acerca más a su propia opinión: Rector o rectora de una universidad")
+  tabla_pulso(P124_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.b Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indique cuál es la respuesta que se acerca más a su propia opinión: Rector o rectora de una universidad")
 salto()
 
 
 ASE_1 %>% 
-  tabla_pulso(P125_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.c Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indíque cuál es la respuesta que se acerca más a su propia opinión: Alto ejecutivo o ejecutiva de una gran empresa")
+  tabla_pulso(P125_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.c Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indique cuál es la respuesta que se acerca más a su propia opinión: Alto ejecutivo o ejecutiva de una gran empresa")
 salto()
 
 ASE_1 %>% 
-  tabla_pulso(P126_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.d Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indíque cuál es la respuesta que se acerca más a su propia opinión: Gobernador o gobernadora regional")
-salto()
-
-
-ASE_1 %>% 
-  tabla_pulso(P127_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.e Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indíque cuál es la respuesta que se acerca más a su propia opinión: Alcalde o alcaldesa provincial")
+  tabla_pulso(P126_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.d Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indique cuál es la respuesta que se acerca más a su propia opinión: Gobernador o gobernadora regional")
 salto()
 
 
 ASE_1 %>% 
-  tabla_pulso(P128_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.f Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indíque cuál es la respuesta que se acerca más a su propia opinión: Alcalde o alcaldesa distrital")
+  tabla_pulso(P127_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.e Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indique cuál es la respuesta que se acerca más a su propia opinión: Alcalde o alcaldesa provincial")
 salto()
 
 
 ASE_1 %>% 
-  tabla_pulso(P129_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.g Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indíque cuál es la respuesta que se acerca más a su propia opinión: Presidente o presidenta de la República")
+  tabla_pulso(P128_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.f Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indique cuál es la respuesta que se acerca más a su propia opinión: Alcalde o alcaldesa distrital")
+salto()
+
+
+ASE_1 %>% 
+  tabla_pulso(P129_1, c(sexo, edad, aregion, educa1, mape, nse2), titulo = "20.g Las personas pueden tener diferentes opiniones acerca de si las mujeres o los hombres son más apropiados para ocupar ciertos puestos de liderazgo. Por favor, para cada uno de los siguientes puestos, indique cuál es la respuesta que se acerca más a su propia opinión: Presidente o presidenta de la República")
 salto()
 
 
