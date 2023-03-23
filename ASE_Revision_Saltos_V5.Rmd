@@ -119,6 +119,26 @@ Para cada una de las diez varaibles que conforman la pregunta 33 (de la variable
 Encontramos que todos los valores de la pregunta 34 (variable P183_1) son NA cuando todos los valores de la pregunta 33 (de la variable P172_1 a la 181_1) son 2. Esto quiere decir que se respeta el salto cuando la persona no sufrió violencia por redes.
 
 
+```{r}
+ASE_Intento_V5$sv_Redes <- ifelse(ASE_Intento_V5$P172_1 == 1 | 
+                                    ASE_Intento_V5$P173_1 == 1 | 
+                                    ASE_Intento_V5$P174_1 == 1 | 
+                                    ASE_Intento_V5$P175_1 == 1 | 
+                                    ASE_Intento_V5$P176_1 == 1 | 
+                                    ASE_Intento_V5$P177_1 == 1 | 
+                                    ASE_Intento_V5$P178_1 == 1 | 
+                                    ASE_Intento_V5$P179_1 == 1 | 
+                                    ASE_Intento_V5$P180_1 == 1 | 
+                                    ASE_Intento_V5$P181_1 == 1, 1, 0)
+
+
+table(ASE_Intento_V5[with(ASE_Intento_V5, sv_Redes == 1),]$P183_1, useNA = "ifany")
+table(ASE_Intento_V5[with(ASE_Intento_V5, sv_Redes == 1),]$P183_2, useNA = "ifany")
+table(ASE_Intento_V5[with(ASE_Intento_V5, sv_Redes == 1),]$P183_3, useNA = "ifany")
+```
+
+
+
 ## Salto 6: Ser la persona que aporta más en el hogar
 ### Pregunta de Salto: 42 (Variable P191_1)
 ### Saltar si: El valor de pregunta 42 es 1 o 2
